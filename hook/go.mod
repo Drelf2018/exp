@@ -1,4 +1,4 @@
-module github.com/Drelf2018/hook
+module github.com/Drelf2018/exp/hook
 
 go 1.18
 
