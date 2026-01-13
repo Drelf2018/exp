@@ -24,3 +24,15 @@ go.work.sum
 
 # env file
 .env
+*.ini
+*.json
+
+# cookie
+*.cookie
+
+# run
+*.bat
+
+# weibo
+blogs
+logs

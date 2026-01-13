@@ -1,13 +1,28 @@
 package hook
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"text/template"
 
 	"github.com/Drelf2018/dingtalk"
 	"github.com/sirupsen/logrus"
+
+	_ "embed"
 )
+
+//go:embed saki.json
+var saki []byte
+
+var Saki = &dingtalk.Bot{}
+
+func init() {
+	err := json.Unmarshal(saki, Saki)
+	if err != nil {
+		panic(err)
+	}
+}
 
 const DingTalk string = "dingtalk"
 
