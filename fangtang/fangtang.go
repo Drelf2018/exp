@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Drelf2018/req"
@@ -170,41 +171,80 @@ func PostSend(ctx context.Context, sendkey, title, desp string, channel ...Chann
 	return req.ResultWithContext[SendResponse](ctx, api)
 }
 
+// Key 用来获取推送结果的键
+type Key struct{}
+
+// pushCtx 推送结果上下文
+type pushCtx struct {
+	ctx  context.Context
+	done chan struct{}
+	once sync.Once
+	push Push
+	resp PushResponse
+	err  error
+}
+
+func (c *pushCtx) Deadline() (time.Time, bool) {
+	return c.ctx.Deadline()
+}
+
+func (c *pushCtx) Done() <-chan struct{} {
+	c.once.Do(func() {
+		go func() {
+			defer close(c.done)
+			ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
+			defer cancel()
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					c.err = ctx.Err()
+					return
+				case <-ticker.C:
+					c.resp, c.err = req.ResultWithContext[PushResponse](ctx, c.push)
+					if c.err == nil {
+						status, err := c.resp.Status()
+						if err != nil {
+							c.err = err
+						} else if status.ErrCode == 0 {
+							return
+						}
+					}
+				}
+			}
+		}()
+	})
+	return c.done
+}
+
+func (c *pushCtx) Err() error {
+	return c.err
+}
+
+func (c *pushCtx) Value(key any) any {
+	if _, ok := key.(Key); ok {
+		return c.resp
+	}
+	return c.ctx.Value(key)
+}
+
 // FangTang 方糖推送
 type FangTang string
 
-// SendWithContext 携带上下文推送消息，会等待异步推送结果再返回
-func (f FangTang) SendWithContext(ctx context.Context, title string, desp string, channel ...Channel) error {
+// SendWithContext 携带上下文推送消息，通过返回的上下文获取推送结果
+func (f FangTang) SendWithContext(ctx context.Context, title string, desp string, channel ...Channel) (context.Context, error) {
 	r, err := PostSend(ctx, string(f), title, desp, channel...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if r.Data.Errno != 0 {
-		return fmt.Errorf("fangtang: failed to get push: %s (%d)", r.Data.Error, r.Data.Errno)
+		return nil, fmt.Errorf("fangtang: failed to get push: %s (%d)", r.Data.Error, r.Data.Errno)
 	}
-	var pr PushResponse
-	timeout := time.After(5 * time.Second)
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return err
-		case <-timeout:
-			return err
-		case <-ticker.C:
-			pr, err = req.ResultWithContext[PushResponse](ctx, r.Data.Push)
-			if err == nil {
-				status, err := pr.Status()
-				if err == nil && status.ErrCode == 0 {
-					return nil
-				}
-			}
-		}
-	}
+	return &pushCtx{ctx: ctx, done: make(chan struct{}), push: r.Data.Push}, nil
 }
 
-// Send 推送消息，会等待异步推送结果再返回
-func (f FangTang) Send(title string, desp string, channel ...Channel) error {
+// Send 推送消息，通过返回的上下文获取推送结果
+func (f FangTang) Send(title string, desp string, channel ...Channel) (context.Context, error) {
 	return f.SendWithContext(context.Background(), title, desp, channel...)
 }
