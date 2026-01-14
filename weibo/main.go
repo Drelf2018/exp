@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,6 +19,7 @@ import (
 	"github.com/Drelf2018/req/cookie"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jessevdk/go-flags"
+	"github.com/playwright-community/playwright-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -55,110 +55,24 @@ func init() {
 	saki = logger.WithField(hook.DingTalk, opts.Saki.Name)
 }
 
-func ToBlog(ctx context.Context, jar http.CookieJar, mblog *Mblog) *model.Blog {
-	if mblog == nil {
-		return nil
+func init() {
+	logger.Debug("安装 playwright")
+	// 安装 playwright
+	err := playwright.Install()
+	if err != nil {
+		logger.Panicln("could not install playwright:", err)
 	}
-	blog := &model.Blog{
-		Edited:    uint64(mblog.EditCount),
-		Platform:  "weibo.com",
-		Type:      "blog",
-		UID:       mblog.User.Idstr,
-		Name:      mblog.User.ScreenName,
-		Avatar:    mblog.User.AvatarHd,
-		MID:       mblog.Mid,
-		URL:       fmt.Sprintf("https://weibo.com/%s/%s", mblog.User.Idstr, mblog.Mblogid),
-		Title:     mblog.Title.Text,
-		Source:    mblog.RegionName,
-		Content:   mblog.Text,
-		Plaintext: mblog.TextRaw,
-		Extra: map[string]any{
-			"device": mblog.Source,
-			"is_top": mblog.IsTop == 1,
-		},
+	// 启动 playwright
+	logger.Debug("启动 playwright")
+	pw, err := playwright.Run()
+	if err != nil {
+		logger.Panicln("could not start playwright:", err)
 	}
-	// 解析博主
-	var r ProfileInfoResponse
-	r, blog.Extra["profile_info_error"] = GetProfileInfo(ctx, blog.UID, jar)
-	blog.Banner, _, _ = strings.Cut(r.Data.User.CoverImagePhone, ";")
-	blog.Follower = r.Data.User.FollowersCountStr
-	blog.Following = strconv.Itoa(r.Data.User.FriendsCount)
-	blog.Description = r.Data.User.Description
-	// 解析时间
-	blog.Time, blog.Extra["time_parse_error"] = time.Parse(time.RubyDate, mblog.CreatedAt)
-	// 解析配图
-	for _, picID := range mblog.PicIds {
-		if pic, ok := mblog.PicInfos[picID]; ok {
-			asset := model.Asset{URL: pic.Largest.URL}
-			ext := filepath.Ext(pic.Largest.URL)
-			if ext != "" {
-				asset.MIME = "image/" + strings.ToLower(ext[1:])
-			}
-			blog.Assets = append(blog.Assets, asset)
-		}
-	}
-	// 解析视频
-	if mblog.PageInfo.MediaInfo.Mp4720PMp4 != "" {
-		blog.Assets = append(blog.Assets, model.Asset{URL: mblog.PageInfo.MediaInfo.Mp4720PMp4, MIME: "video/mp4"})
-	}
-	// 解析被回复博文
-	if mblog.RetweetedStatus != nil {
-		blog.Reply = ToBlog(ctx, jar, mblog.RetweetedStatus)
-	}
-	return blog
-}
-
-func RenderMarkdown(b *strings.Builder, blog *model.Blog, depth int) {
-	prefix := strings.Repeat(">", depth) + " "
-	if blog.Banner != "" {
-		if depth != 0 {
-			b.WriteString(prefix)
-		}
-		b.WriteString("![](")
-		b.WriteString(blog.Banner)
-		b.WriteString(")\n")
-		if depth == 0 {
-			b.WriteByte('\n')
-		}
-	}
-	if depth != 0 {
-		b.WriteString(prefix)
-	}
-	b.WriteString("### ")
-	b.WriteString(blog.Name)
-	if blog.Title != "" {
-		b.WriteString(" ")
-		b.WriteString(blog.Title)
-	}
-	b.WriteByte('\n')
-	if depth == 0 {
-		b.WriteByte('\n')
-	} else {
-		b.WriteString(prefix)
-	}
-	b.WriteString(strings.TrimSpace(blog.Content))
-	b.WriteByte('\n')
-	if depth == 0 {
-		b.WriteByte('\n')
-	}
-	for _, a := range blog.Assets {
-		if !strings.HasPrefix(a.MIME, "image") {
-			continue
-		}
-		if depth != 0 {
-			b.WriteString(prefix)
-		}
-		b.WriteString("![](")
-		b.WriteString(a.URL)
-		b.WriteByte(')')
-		b.WriteByte('\n')
-		if depth == 0 {
-			b.WriteByte('\n')
-		}
-	}
-	if blog.Reply != nil {
-		blog.Reply.Banner = ""
-		RenderMarkdown(b, blog.Reply, depth+1)
+	// 启动 Chromium 浏览器
+	logger.Debug("启动 Chromium 浏览器")
+	browser, err = pw.Chromium.Launch()
+	if err != nil {
+		logger.Panicln("could not launch browser:", err)
 	}
 }
 
@@ -198,19 +112,14 @@ func fetch(ctx context.Context, jar http.CookieJar, target int) {
 				}
 				// 推送
 				logger.Infoln("Saving blog", mblog.Mid)
-				blog := ToBlog(ctx, jar, &mblog)
+				blog := mblog.ToBlog(ctx, jar)
 				go func(blog *model.Blog) {
 					var b strings.Builder
 					RenderMarkdown(&b, blog, 0)
-					err := opts.Saki.Send(dingtalk.ActionCard{
-						SingleURL:   blog.URL,
-						SingleTitle: "阅读全文",
-						Text:        b.String(),
-						Title:       fmt.Sprintln(blog.Name, blog.Plaintext),
-					})
+					err := opts.Saki.SendSingleActionCardWithContext(ctx, fmt.Sprintln(blog.Name, blog.Plaintext), b.String(), "阅读全文", blog.URL)
 					if err != nil {
 						saki.Error(err)
-						err = opts.Saki.SendLink(blog.Name, blog.Plaintext, blog.Avatar, blog.URL)
+						err = opts.Saki.SendLinkWithContext(ctx, blog.Name, blog.Plaintext, blog.Avatar, blog.URL)
 						if err != nil {
 							saki.Error(err)
 						}
@@ -237,14 +146,21 @@ func main() {
 	if err != nil {
 		logger.Panic(err)
 	}
-	// 保存博文
+	// 初始化博文保存目录
 	err = os.MkdirAll("./blogs", os.ModePerm)
+	if err != nil {
+		logger.Panic(err)
+	}
+	err = os.MkdirAll("./blogs/screenshots", os.ModePerm)
 	if err != nil {
 		logger.Panic(err)
 	}
 	// 开启 Cookie 保活
 	ctx, cancel := context.WithCancel(context.Background())
-	cookie.KeepaliveWithContext(ctx, c, Refresher, 6*time.Hour)
+	time.AfterFunc(NextTimeDuration(3, 0, 0), func() {
+		k := &cookie.KeepaliveCookieJar{CookieJar: c, Refresher: Refresher}
+		go k.Keepalive(ctx, 6*time.Hour, true)
+	})
 	// 轮询获取博文
 	go fetch(ctx, c, opts.Target)
 	// 创建后端

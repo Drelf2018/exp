@@ -4,12 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/Drelf2018/exp/model"
 	"github.com/Drelf2018/req"
 	"github.com/Drelf2018/req/method"
 )
 
-var Session, _ = req.NewSession(
+var session, _ = req.NewSession(
 	req.SessionURL("https://weibo.com/"),
 	req.SessionHeaders{
 		"Referer":          "https://weibo.com/",
@@ -65,7 +70,7 @@ func (r ProfileInfoResponse) Unwrap() error {
 var _ req.Unwrap = (*ProfileInfoResponse)(nil)
 
 func GetProfileInfo(ctx context.Context, uid string, jar http.CookieJar) (r ProfileInfoResponse, err error) {
-	err = Session.ResultWithContext(ctx, ProfileInfo{UID: uid, CookieJar: jar}, &r)
+	err = session.ResultWithContext(ctx, ProfileInfo{UID: uid, CookieJar: jar}, &r)
 	return
 }
 
@@ -129,6 +134,57 @@ type Mblog struct {
 	} `json:"title,omitempty"`
 }
 
+// ToBlog 将微博转换成通用博文模型
+func (mblog *Mblog) ToBlog(ctx context.Context, jar http.CookieJar) *model.Blog {
+	blog := &model.Blog{
+		Edited:    uint64(mblog.EditCount),
+		Platform:  "weibo.com",
+		Type:      "blog",
+		UID:       mblog.User.Idstr,
+		Name:      mblog.User.ScreenName,
+		Avatar:    mblog.User.AvatarHd,
+		MID:       mblog.Mid,
+		URL:       fmt.Sprintf("https://weibo.com/%s/%s", mblog.User.Idstr, mblog.Mblogid),
+		Title:     mblog.Title.Text,
+		Source:    mblog.RegionName,
+		Content:   mblog.Text,
+		Plaintext: mblog.TextRaw,
+		Extra: map[string]any{
+			"device": mblog.Source,
+			"is_top": mblog.IsTop == 1,
+		},
+	}
+	// 解析博主
+	var r ProfileInfoResponse
+	r, blog.Extra["profile_info_error"] = GetProfileInfo(ctx, blog.UID, jar)
+	blog.Banner, _, _ = strings.Cut(r.Data.User.CoverImagePhone, ";")
+	blog.Follower = r.Data.User.FollowersCountStr
+	blog.Following = strconv.Itoa(r.Data.User.FriendsCount)
+	blog.Description = r.Data.User.Description
+	// 解析时间
+	blog.Time, blog.Extra["time_parse_error"] = time.Parse(time.RubyDate, mblog.CreatedAt)
+	// 解析配图
+	for _, picID := range mblog.PicIds {
+		if pic, ok := mblog.PicInfos[picID]; ok {
+			asset := model.Asset{URL: pic.Largest.URL}
+			ext := filepath.Ext(pic.Largest.URL)
+			if ext != "" {
+				asset.MIME = "image/" + strings.ToLower(ext[1:])
+			}
+			blog.Assets = append(blog.Assets, asset)
+		}
+	}
+	// 解析视频
+	if mblog.PageInfo.MediaInfo.Mp4720PMp4 != "" {
+		blog.Assets = append(blog.Assets, model.Asset{URL: mblog.PageInfo.MediaInfo.Mp4720PMp4, MIME: "video/mp4"})
+	}
+	// 解析被回复博文
+	if mblog.RetweetedStatus != nil {
+		blog.Reply = mblog.RetweetedStatus.ToBlog(ctx, jar)
+	}
+	return blog
+}
+
 type MymlogResponse struct {
 	Ok      int    `json:"ok"`
 	Message string `json:"message"`
@@ -153,7 +209,7 @@ func (r MymlogResponse) Unwrap() error {
 var _ req.Unwrap = (*MymlogResponse)(nil)
 
 func GetMymlog(ctx context.Context, uid int, jar http.CookieJar) (r MymlogResponse, err error) {
-	err = Session.ResultWithContext(ctx, Mymlog{CookieJar: jar, UID: uid}, &r)
+	err = session.ResultWithContext(ctx, Mymlog{CookieJar: jar, UID: uid}, &r)
 	return
 }
 

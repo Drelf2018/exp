@@ -12,58 +12,36 @@ import (
 
 	"github.com/Drelf2018/req/cookie"
 	"github.com/playwright-community/playwright-go"
-	"github.com/sirupsen/logrus"
 )
 
 var browser playwright.Browser
 
-func init() {
-	logrus.Debug("安装 playwright")
-	// 安装 playwright
-	err := playwright.Install()
-	if err != nil {
-		logrus.Panicln("could not install playwright:", err)
-	}
-	// 启动 playwright
-	logrus.Debug("启动 playwright")
-	pw, err := playwright.Run()
-	if err != nil {
-		logrus.Panicln("could not start playwright:", err)
-	}
-	// 启动 Chromium 浏览器
-	logrus.Debug("启动 Chromium 浏览器")
-	browser, err = pw.Chromium.Launch()
-	if err != nil {
-		logrus.Panicln("could not launch browser:", err)
-	}
-}
-
 func Refresh(ctx context.Context, jar http.CookieJar) error {
 	// 创建浏览器上下文
 	logger.Debug("创建浏览器上下文")
-	context, err := browser.NewContext()
+	browserContext, err := browser.NewContext()
 	if err != nil {
 		return fmt.Errorf("could not create context: %w", err)
 	}
-	defer context.Close()
+	defer browserContext.Close()
 	// 添加 Cookie
 	logger.Debug("添加 Cookie")
 	cookies := make([]playwright.OptionalCookie, 0)
-	for _, cookie := range jar.Cookies(Session.BaseURL) {
+	for _, cookie := range jar.Cookies(session.BaseURL) {
 		cookies = append(cookies, playwright.OptionalCookie{
 			Name:   cookie.Name,
 			Value:  cookie.Value,
-			Domain: playwright.String("." + Session.BaseURL.Host),
+			Domain: playwright.String("." + session.BaseURL.Host),
 			Path:   playwright.String("/"),
 		})
 	}
-	err = context.AddCookies(cookies)
+	err = browserContext.AddCookies(cookies)
 	if err != nil {
 		return fmt.Errorf("could not add cookies: %w", err)
 	}
 	// 新建页面
 	logger.Debug("新建页面")
-	page, err := context.NewPage()
+	page, err := browserContext.NewPage()
 	if err != nil {
 		return fmt.Errorf("could not create page: %w", err)
 	}
@@ -76,15 +54,17 @@ func Refresh(ctx context.Context, jar http.CookieJar) error {
 	}
 	// 轮询等待页面加载后获取 Cookie
 	logger.Debug("轮询等待页面加载后获取 Cookie")
-	ticker := time.NewTicker(5 * time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-time.After(30 * time.Second):
-			return fmt.Errorf("waiting for cookie timeout: %v", 30*time.Second)
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for cookie timeout: %w", ctx.Err())
 		case <-ticker.C:
 			logger.Debug("开始获取 Cookie")
-			pwCookies, err := context.Cookies("https://weibo.com/u/7198559139")
+			pwCookies, err := browserContext.Cookies("https://weibo.com/u/7198559139")
 			if err != nil {
 				return fmt.Errorf("cookie not found: %w", err)
 			}
@@ -103,24 +83,19 @@ func Refresh(ctx context.Context, jar http.CookieJar) error {
 				continue
 			}
 			logger.Debug("设置 Cookie")
-			jar.SetCookies(Session.BaseURL, cookies)
-			img, err := page.Screenshot()
+			jar.SetCookies(session.BaseURL, cookies)
+			filename := time.Now().Format("2006-01-02-15-04-05")
+			_, err = page.Screenshot(playwright.PageScreenshotOptions{
+				Path: playwright.String(fmt.Sprintf("./blogs/screenshots/%s.jpg", filename)),
+			})
 			if err != nil {
 				saki.Errorln("cannot screenshot:", err)
-				return nil
+			} else {
+				// base64Str := base64.StdEncoding.EncodeToString(img)
+				// base64URL := fmt.Sprintf("data:%s;base64,%s", "image/jpg", base64Str)
+				// saki.Infof("![刷新成功](%s)", base64URL)
+				saki.Infof("![刷新成功](http://api.nana7mi.link:%d/screenshots/%s.jpg)", opts.Port, filename)
 			}
-			err = os.MkdirAll("./blogs/screenshots", os.ModePerm)
-			if err != nil {
-				saki.Errorln("cannot mkdir:", err)
-				return nil
-			}
-			filename := time.Now().Format("2006-01-02-15-04-05")
-			err = os.WriteFile(fmt.Sprintf("./blogs/screenshots/%s.jpg", filename), img, os.ModePerm)
-			if err != nil {
-				saki.Errorln("cannot write file:", err)
-			}
-			// 刷新成功
-			saki.Infof("![%s 刷新成功](http://api.nana7mi.link:%d/screenshots/%s.jpg)", filename, opts.Port, filename)
 			return nil
 		}
 	}
@@ -148,7 +123,7 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	c.CookieJar.SetCookies(u, cookies)
 	// 更新本地 Cookie
 	req := &http.Request{Header: make(http.Header)}
-	for _, cookie := range c.CookieJar.Cookies(Session.BaseURL) {
+	for _, cookie := range c.CookieJar.Cookies(session.BaseURL) {
 		req.AddCookie(cookie)
 	}
 	c.OnError(os.WriteFile(strconv.Itoa(c.UID)+".cookie", []byte(req.Header.Get("Cookie")), os.ModePerm))
@@ -168,6 +143,6 @@ func NewCookieJar(uid int) (*CookieJar, error) {
 	if err != nil {
 		return nil, err
 	}
-	jar.SetCookies(Session.BaseURL, cookies)
+	jar.SetCookies(session.BaseURL, cookies)
 	return k, nil
 }
