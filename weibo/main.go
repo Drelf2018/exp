@@ -23,9 +23,38 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var logger = hook.New(logrus.InfoLevel, hook.NewDailyFileHook("logs/2006-01-02.log"), hook.NewDingTalkHook(hook.Saki))
-var saki = logger.WithField(hook.DingTalk, hook.Saki.Name)
-var port = 8654
+const port = 8654
+
+type Options struct {
+	Me     int           `short:"m" long:"me" description:"你的微博 UID"`
+	Target int           `short:"t" long:"target" description:"监控目标 UID"`
+	Saki   *dingtalk.Bot `group:"Saki" description:"小祥钉钉机器人"`
+}
+
+var (
+	opts   Options
+	saki   *logrus.Entry
+	logger *logrus.Logger
+)
+
+func init() {
+	// 解析默认配置文件
+	err := flags.IniParse("config.ini", &opts)
+	if err != nil {
+		logger.Panic(err)
+	}
+	// 解析命令行参数
+	_, err = flags.Parse(&opts)
+	if err != nil {
+		logger.Panic(err)
+	}
+	if opts.Target == 0 {
+		logger.Panic(errors.New("no target"))
+	}
+	// 初始化日志
+	logger = hook.New(logrus.InfoLevel, hook.NewDailyFileHook("logs/2006-01-02.log"), hook.NewDingTalkHook(opts.Saki))
+	saki = logger.WithField(hook.DingTalk, opts.Saki.Name)
+}
 
 func ToBlog(ctx context.Context, jar http.CookieJar, mblog *Mblog) *model.Blog {
 	if mblog == nil {
@@ -174,7 +203,7 @@ func fetch(ctx context.Context, jar http.CookieJar, target int) {
 				go func(blog *model.Blog) {
 					var b strings.Builder
 					RenderMarkdown(&b, blog, 0)
-					err := hook.Saki.Send(dingtalk.ActionCard{
+					err := opts.Saki.Send(dingtalk.ActionCard{
 						SingleURL:   blog.URL,
 						SingleTitle: "阅读全文",
 						Text:        b.String(),
@@ -182,7 +211,7 @@ func fetch(ctx context.Context, jar http.CookieJar, target int) {
 					})
 					if err != nil {
 						saki.Error(err)
-						err = hook.Saki.SendLink(blog.Name, blog.Plaintext, blog.Avatar, blog.URL)
+						err = opts.Saki.SendLink(blog.Name, blog.Plaintext, blog.Avatar, blog.URL)
 						if err != nil {
 							saki.Error(err)
 						}
@@ -203,30 +232,7 @@ func fetch(ctx context.Context, jar http.CookieJar, target int) {
 	}
 }
 
-type Options struct {
-	Me     int `short:"m" long:"me" description:"你的微博 UID"`
-	Target int `short:"t" long:"target" description:"监控目标 UID"`
-}
-
-var ErrNoTarget = errors.New("no target")
-
 func main() {
-	// 解析命令行参数
-	var opts Options
-	_, err := flags.Parse(&opts)
-	if err != nil {
-		logger.Panic(err)
-	}
-	// 未提供命令行参数，读取配置文件
-	if opts.Target == 0 {
-		err = flags.IniParse("config.ini", &opts)
-		if err != nil {
-			logger.Panic(err)
-		}
-	}
-	if opts.Target == 0 {
-		logger.Panic(ErrNoTarget)
-	}
 	// 获取 Cookie
 	c, err := NewCookieJar(opts.Me)
 	if err != nil {

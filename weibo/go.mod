@@ -3,8 +3,8 @@ module github.com/Drelf2018/exp/weibo
 go 1.23
 
 require (
-	github.com/Drelf2018/dingtalk v0.0.0-20260108180801-122e61c5f895
-	github.com/Drelf2018/exp/hook v0.0.0-20260113180942-0cc79ceadbbb
+	github.com/Drelf2018/dingtalk v0.0.0-20260114080441-911465ac97cf
+	github.com/Drelf2018/exp/hook v0.0.0-20260114084840-e47e83fd56dd
 	github.com/Drelf2018/exp/model v0.0.0-20260113180942-0cc79ceadbbb
 	github.com/Drelf2018/req v0.0.0-20260106142955-ed8acd6b8e96
 	github.com/gofiber/fiber/v2 v2.52.10

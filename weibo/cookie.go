@@ -12,28 +12,29 @@ import (
 
 	"github.com/Drelf2018/req/cookie"
 	"github.com/playwright-community/playwright-go"
+	"github.com/sirupsen/logrus"
 )
 
 var browser playwright.Browser
 
 func init() {
-	logger.Debug("安装 playwright")
+	logrus.Debug("安装 playwright")
 	// 安装 playwright
 	err := playwright.Install()
 	if err != nil {
-		logger.Panicln("could not install playwright:", err)
+		logrus.Panicln("could not install playwright:", err)
 	}
 	// 启动 playwright
-	logger.Debug("启动 playwright")
+	logrus.Debug("启动 playwright")
 	pw, err := playwright.Run()
 	if err != nil {
-		logger.Panicln("could not start playwright:", err)
+		logrus.Panicln("could not start playwright:", err)
 	}
 	// 启动 Chromium 浏览器
-	logger.Debug("启动 Chromium 浏览器")
+	logrus.Debug("启动 Chromium 浏览器")
 	browser, err = pw.Chromium.Launch()
 	if err != nil {
-		logger.Panicln("could not launch browser:", err)
+		logrus.Panicln("could not launch browser:", err)
 	}
 }
 
