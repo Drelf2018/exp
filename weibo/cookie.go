@@ -120,7 +120,7 @@ func Refresh(ctx context.Context, jar http.CookieJar) error {
 				saki.Errorln("cannot write file:", err)
 			}
 			// 刷新成功
-			saki.Infof("![%s 刷新成功](http://api.nana7mi.link:%d/screenshots/%s.jpg)", filename, port, filename)
+			saki.Infof("![%s 刷新成功](http://api.nana7mi.link:%d/screenshots/%s.jpg)", filename, opts.Port, filename)
 			return nil
 		}
 	}

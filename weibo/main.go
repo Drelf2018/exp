@@ -23,11 +23,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const port = 8654
-
 type Options struct {
 	Me     int           `short:"m" long:"me" description:"你的微博 UID"`
 	Target int           `short:"t" long:"target" description:"监控目标 UID"`
+	Port   uint16        `short:"p" long:"port" description:"后端端口"`
 	Saki   *dingtalk.Bot `group:"Saki" description:"小祥钉钉机器人"`
 }
 
@@ -262,5 +261,5 @@ func main() {
 		app.Shutdown()
 	}()
 	// 开启后端
-	app.Listen(fmt.Sprintf("0.0.0.0:%d", port))
+	app.Listen(fmt.Sprintf("0.0.0.0:%d", opts.Port))
 }
