@@ -1,8 +1,6 @@
 package hook
 
 import (
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -10,19 +8,6 @@ import (
 	"github.com/Drelf2018/dingtalk"
 	"github.com/sirupsen/logrus"
 )
-
-var Saki = &dingtalk.Bot{}
-
-func init() {
-	saki, err := os.ReadFile("saki.json")
-	if err != nil {
-		panic(err)
-	}
-	err = json.Unmarshal(saki, Saki)
-	if err != nil {
-		panic(err)
-	}
-}
 
 const DingTalk string = "dingtalk"
 
@@ -33,9 +18,9 @@ var dingtalkTmpl, _ = template.New("dingtalk").
 	}).
 	Parse(`### [{{upper .Level.String}}] {{base .Caller.File}}
 
-{{.Time.Format "2006-01-02 15:04:05"}}
-
 {{.Message}}
+
+###### {{.Time.Format "2006-01-02 15:04:05"}}
 
 {{if .Data}}| Key | Value |
 |-----|-------|

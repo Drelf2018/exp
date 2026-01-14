@@ -3,7 +3,7 @@ module github.com/Drelf2018/exp/hook
 go 1.18
 
 require (
-	github.com/Drelf2018/dingtalk v0.0.0-20260108180801-122e61c5f895
+	github.com/Drelf2018/dingtalk v0.0.0-20260114080441-911465ac97cf
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/sirupsen/logrus v1.9.3
 )
