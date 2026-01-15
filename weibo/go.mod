@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/Drelf2018/dingtalk v0.0.0-20260114080441-911465ac97cf
-	github.com/Drelf2018/exp/hook v0.0.0-20260114084840-e47e83fd56dd
+	github.com/Drelf2018/exp/hook v0.0.0-20260115183411-e547e097339b
 	github.com/Drelf2018/exp/model v0.0.0-20260113180942-0cc79ceadbbb
 	github.com/Drelf2018/req v0.0.0-20260115180300-6ed8f11b1b73
 	github.com/gofiber/fiber/v2 v2.52.10

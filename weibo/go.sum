@@ -1,7 +1,7 @@
 github.com/Drelf2018/dingtalk v0.0.0-20260114080441-911465ac97cf h1:JwWTg2KlfjfcXzpr8GGWtGBRsnnwjjCTVYfjBEveDaA=
 github.com/Drelf2018/dingtalk v0.0.0-20260114080441-911465ac97cf/go.mod h1:YECT11cObhBPp8GSAvm7AcQ9XN33z1Yx9t15QqW8QSc=
-github.com/Drelf2018/exp/hook v0.0.0-20260114084840-e47e83fd56dd h1:t7cAAro75kRk9x5RttBjTfHJmHLcSsnmHNZWtfR4Fnc=
-github.com/Drelf2018/exp/hook v0.0.0-20260114084840-e47e83fd56dd/go.mod h1:HcGkWfgABzCSCyHmB81nTLugWhLxYC90B6v/KL/zVDE=
+github.com/Drelf2018/exp/hook v0.0.0-20260115183411-e547e097339b h1:1JBJHuuufFvhGNfYkJoJObzYUjhFAJrtWb/J+52MKUQ=
+github.com/Drelf2018/exp/hook v0.0.0-20260115183411-e547e097339b/go.mod h1:HcGkWfgABzCSCyHmB81nTLugWhLxYC90B6v/KL/zVDE=
 github.com/Drelf2018/exp/model v0.0.0-20260113180942-0cc79ceadbbb h1:AQBYy9Z+akkoxYLc3OUuqK+njotDuRYQNkpkxoepppk=
 github.com/Drelf2018/exp/model v0.0.0-20260113180942-0cc79ceadbbb/go.mod h1:oG9L+uuY6TNbdWXX1WHVF9Z4DQoaBRX4dt0sr/Rn2fE=
 github.com/Drelf2018/req v0.0.0-20260115180300-6ed8f11b1b73 h1:bYlpiGbjsX1eKF0wtbNJncQ/IqOIbjC8kt6HDNe7j+Y=

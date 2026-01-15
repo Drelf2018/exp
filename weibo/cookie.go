@@ -93,16 +93,16 @@ var Refresher cookie.Refresher = cookie.ForcedRefresher(func(ctx context.Context
 			}
 			img, err := page.Screenshot()
 			if err != nil {
-				saki.Errorln("cannot screenshot:", err)
+				saki.WithField("title", "微博截屏失败").Error(err)
 				return nil
 			}
 			api := Upload{File: bytes.NewReader(img)}
 			uuid, err := req.JSONWithContext(ctx, api)
 			if err != nil {
-				saki.Errorln("cannot upload screenshot:", err)
+				saki.WithField("title", "微博截屏上传失败").Error(err)
 				return nil
 			}
-			saki.Infof("![刷新成功](%s/%s)", api.RawURL(), uuid)
+			saki.WithField("title", "微博刷新成功").Infof("![](%s/%s)", api.RawURL(), uuid)
 			return nil
 		}
 	}
@@ -116,7 +116,7 @@ type CookieJar struct {
 
 func (c *CookieJar) OnError(err error) {
 	if err != nil {
-		saki.Error(err)
+		saki.WithField("title", "微博刷新失败").Error(err)
 	}
 }
 
