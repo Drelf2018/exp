@@ -4,8 +4,8 @@ github.com/Drelf2018/exp/hook v0.0.0-20260114084840-e47e83fd56dd h1:t7cAAro75kRk
 github.com/Drelf2018/exp/hook v0.0.0-20260114084840-e47e83fd56dd/go.mod h1:HcGkWfgABzCSCyHmB81nTLugWhLxYC90B6v/KL/zVDE=
 github.com/Drelf2018/exp/model v0.0.0-20260113180942-0cc79ceadbbb h1:AQBYy9Z+akkoxYLc3OUuqK+njotDuRYQNkpkxoepppk=
 github.com/Drelf2018/exp/model v0.0.0-20260113180942-0cc79ceadbbb/go.mod h1:oG9L+uuY6TNbdWXX1WHVF9Z4DQoaBRX4dt0sr/Rn2fE=
-github.com/Drelf2018/req v0.0.0-20260106142955-ed8acd6b8e96 h1:xN0CDIa4nlcyZ6oYIMJwM3mU/92f1mIJ/SZeO0lc/tQ=
-github.com/Drelf2018/req v0.0.0-20260106142955-ed8acd6b8e96/go.mod h1:SgQkhv/iD3+Sqvg9KCqiElH7jaXMl4OWGBKHd6MJoCE=
+github.com/Drelf2018/req v0.0.0-20260115180300-6ed8f11b1b73 h1:bYlpiGbjsX1eKF0wtbNJncQ/IqOIbjC8kt6HDNe7j+Y=
+github.com/Drelf2018/req v0.0.0-20260115180300-6ed8f11b1b73/go.mod h1:SgQkhv/iD3+Sqvg9KCqiElH7jaXMl4OWGBKHd6MJoCE=
 github.com/Drelf2018/req/template v0.0.0-20260106142955-ed8acd6b8e96 h1:UYrCUfIBschURnRkSjbttju3he1savtHWsaN1cGQA+w=
 github.com/Drelf2018/req/template v0.0.0-20260106142955-ed8acd6b8e96/go.mod h1:HsNvSZvDUa1bbtNN+LmkBv+JxLelyXO12D15aT+lQ4w=
 github.com/PuerkitoBio/goquery v1.9.3 h1:mpJr/ikUA9/GNJB/DBZcGeFDXUtosHRyRrwh7KGdTG0=

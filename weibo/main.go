@@ -157,10 +157,7 @@ func main() {
 	}
 	// 开启 Cookie 保活
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(NextTimeDuration(3, 0, 0), func() {
-		k := &cookie.KeepaliveCookieJar{CookieJar: c, Refresher: Refresher}
-		go k.Keepalive(ctx, 6*time.Hour, true)
-	})
+	time.AfterFunc(NextTimeDuration(3, 0, 0), func() { cookie.KeepaliveWithContext(ctx, c, Refresher, 6*time.Hour) })
 	// 轮询获取博文
 	go fetch(ctx, c, opts.Target)
 	// 创建后端

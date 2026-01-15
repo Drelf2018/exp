@@ -18,7 +18,8 @@ import (
 
 var browser playwright.Browser
 
-func Refresh(ctx context.Context, jar http.CookieJar) error {
+// Refresher 使用 playwright 访问微博主页进行刷新
+var Refresher cookie.Refresher = cookie.ForcedRefresher(func(ctx context.Context, jar http.CookieJar) error {
 	// 创建浏览器上下文
 	logger.Debug("创建浏览器上下文")
 	browserContext, err := browser.NewContext()
@@ -86,6 +87,10 @@ func Refresh(ctx context.Context, jar http.CookieJar) error {
 			}
 			logger.Debug("设置 Cookie")
 			jar.SetCookies(session.BaseURL, cookies)
+			_, err = GetMymlog(ctx, 7198559139, jar)
+			if err != nil {
+				return fmt.Errorf("invalid cookie: %w", err)
+			}
 			img, err := page.Screenshot()
 			if err != nil {
 				saki.Errorln("cannot screenshot:", err)
@@ -101,10 +106,7 @@ func Refresh(ctx context.Context, jar http.CookieJar) error {
 			return nil
 		}
 	}
-}
-
-// Refresher 使用 playwright 访问微博主页进行刷新
-var Refresher cookie.Refresher = cookie.ForcedRefresher(Refresh)
+})
 
 // CookieJar 每次设置 Cookie 时将其保存在本地
 type CookieJar struct {

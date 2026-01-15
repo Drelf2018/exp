@@ -15,14 +15,10 @@ import (
 	"github.com/Drelf2018/req/method"
 )
 
-var session, _ = req.NewSession(
-	req.SessionURL("https://weibo.com/"),
-	req.SessionHeaders{
-		"Referer":          "https://weibo.com/",
-		"User-Agent":       req.UserAgent,
-		"X-Requested-With": "XMLHttpRequest",
-	},
-)
+var session = req.DefaultSession.Clone().SetBaseURL("https://weibo.com/").SetHeader(map[string]string{
+	"Referer":          "https://weibo.com/",
+	"X-Requested-With": "XMLHttpRequest",
+})
 
 // CSRF 为请求头添加 X-Xsrf-Token
 type CSRF struct{}
