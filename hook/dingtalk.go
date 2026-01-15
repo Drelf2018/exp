@@ -16,16 +16,11 @@ var dingtalkTmpl, _ = template.New("dingtalk").
 		"upper": strings.ToUpper,
 		"base":  filepath.Base,
 	}).
-	Parse(`### [{{upper .Level.String}}] {{base .Caller.File}}
+	Parse(`### [{{upper .Level.String}}] {{if .Data.title}}{{.Data.title}}{{else}}{{base .Caller.File}}{{end}}
 
 {{.Message}}
 
-###### {{.Time.Format "2006-01-02 15:04:05"}}
-
-{{if .Data}}| Key | Value |
-|-----|-------|
-{{range $k, $v := .Data}}| {{$k}} | {{$v}} |
-{{end}}{{end}}`)
+###### {{.Time.Format "2006-01-02 15:04:05"}}`)
 
 type DingTalkHook struct {
 	*dingtalk.Bot
@@ -48,12 +43,15 @@ func (d *DingTalkHook) Fire(entry *logrus.Entry) error {
 			if err != nil {
 				return err
 			}
-			go func(logger *logrus.Logger, msg, text string) {
-				err := d.SendMarkdown(text[4:strings.Index(text, "\n")+1]+msg, text)
+			go func(logger *logrus.Logger, text string) {
+				title := strings.ReplaceAll(text, "\n\n", "\n")
+				title = strings.ReplaceAll(title, "\n", " ")
+				title = strings.ReplaceAll(title, "#", "")
+				err := d.SendMarkdown(title, text)
 				if err != nil {
 					logger.Error(err)
 				}
-			}(entry.Logger, entry.Message, b.String())
+			}(entry.Logger, b.String())
 		}
 	}
 	return nil
