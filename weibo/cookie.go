@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Drelf2018/req"
 	"github.com/Drelf2018/req/cookie"
 	"github.com/playwright-community/playwright-go"
 )
@@ -84,18 +86,18 @@ func Refresh(ctx context.Context, jar http.CookieJar) error {
 			}
 			logger.Debug("设置 Cookie")
 			jar.SetCookies(session.BaseURL, cookies)
-			filename := time.Now().Format("2006-01-02-15-04-05")
-			_, err = page.Screenshot(playwright.PageScreenshotOptions{
-				Path: playwright.String(fmt.Sprintf("./blogs/screenshots/%s.jpg", filename)),
-			})
+			img, err := page.Screenshot()
 			if err != nil {
 				saki.Errorln("cannot screenshot:", err)
-			} else {
-				// base64Str := base64.StdEncoding.EncodeToString(img)
-				// base64URL := fmt.Sprintf("data:%s;base64,%s", "image/jpg", base64Str)
-				// saki.Infof("![刷新成功](%s)", base64URL)
-				saki.Infof("![刷新成功](http://api.nana7mi.link:%d/screenshots/%s.jpg)", opts.Port, filename)
+				return nil
 			}
+			api := Upload{File: bytes.NewReader(img)}
+			uuid, err := req.JSONWithContext(ctx, api)
+			if err != nil {
+				saki.Errorln("cannot upload screenshot:", err)
+				return nil
+			}
+			saki.Infof("![刷新成功](%s/%s)", api.RawURL(), uuid)
 			return nil
 		}
 	}
