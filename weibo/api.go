@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -94,11 +93,7 @@ func (Mymlog) RawURL() string {
 var _ req.API = Mymlog{}
 
 type PicInfo struct {
-	URL     string `json:"url"`
-	Width   int    `json:"width"`
-	Height  int    `json:"height"`
-	CutType int    `json:"cut_type"`
-	Type    string `json:"type"`
+	URL string `json:"url"`
 }
 
 type Mblog struct {
@@ -132,54 +127,59 @@ type Mblog struct {
 }
 
 // ToBlog 将微博转换成通用博文模型
-func (mblog *Mblog) ToBlog(ctx context.Context, jar http.CookieJar) *model.Blog {
+func (mblog *Mblog) ToBlog() *model.Blog {
 	blog := &model.Blog{
-		Edited:    uint64(mblog.EditCount),
-		Platform:  "weibo.com",
-		Type:      "blog",
 		UID:       mblog.User.Idstr,
 		Name:      mblog.User.ScreenName,
 		Avatar:    mblog.User.AvatarHd,
 		MID:       mblog.Mid,
 		URL:       fmt.Sprintf("https://weibo.com/%s/%s", mblog.User.Idstr, mblog.Mblogid),
+		Site:      "weibo.com",
+		Type:      "blog",
 		Title:     mblog.Title.Text,
 		Source:    mblog.RegionName,
+		Version:   strconv.Itoa(mblog.EditCount),
 		Content:   mblog.Text,
 		Plaintext: mblog.TextRaw,
-		Extra: map[string]any{
+		Extra: model.Extra{
 			"device": mblog.Source,
 			"is_top": mblog.IsTop == 1,
 		},
 	}
-	// 解析博主
-	var r ProfileInfoResponse
-	r, blog.Extra["profile_info_error"] = GetProfileInfo(ctx, blog.UID, jar)
-	blog.Banner, _, _ = strings.Cut(r.Data.User.CoverImagePhone, ";")
-	blog.Follower = r.Data.User.FollowersCountStr
-	blog.Following = strconv.Itoa(r.Data.User.FriendsCount)
-	blog.Description = r.Data.User.Description
+	// 判断是否为点赞了微博
+	if strings.HasSuffix(blog.Title, "赞过的微博") {
+		blog.Type = "like"
+	}
 	// 解析时间
 	blog.Time, blog.Extra["time_parse_error"] = time.Parse(time.RubyDate, mblog.CreatedAt)
-	// 解析配图
+	// 添加配图
 	for _, picID := range mblog.PicIds {
 		if pic, ok := mblog.PicInfos[picID]; ok {
-			asset := model.Asset{URL: pic.Largest.URL}
-			ext := filepath.Ext(pic.Largest.URL)
-			if ext != "" {
-				asset.MIME = "image/" + strings.ToLower(ext[1:])
-			}
-			blog.Assets = append(blog.Assets, asset)
+			blog.Assets = append(blog.Assets, pic.Largest.URL)
 		}
 	}
-	// 解析视频
+	// 添加视频
 	if mblog.PageInfo.MediaInfo.Mp4720PMp4 != "" {
-		blog.Assets = append(blog.Assets, model.Asset{URL: mblog.PageInfo.MediaInfo.Mp4720PMp4, MIME: "video/mp4"})
+		blog.Assets = append(blog.Assets, mblog.PageInfo.MediaInfo.Mp4720PMp4)
 	}
 	// 解析被回复博文
 	if mblog.RetweetedStatus != nil {
-		blog.Reply = mblog.RetweetedStatus.ToBlog(ctx, jar)
+		blog.Reply = mblog.RetweetedStatus.ToBlog()
 	}
 	return blog
+}
+
+// SetProfileInfo 为博文设置微博博主信息
+func SetProfileInfo(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
+	var r ProfileInfoResponse
+	r, blog.Extra["profile_info_error"] = GetProfileInfo(ctx, blog.UID, jar)
+	blog.Desc = r.Data.User.Description
+	blog.Banner, _, _ = strings.Cut(r.Data.User.CoverImagePhone, ";")
+	blog.Follower = r.Data.User.FollowersCountStr
+	blog.Following = strconv.Itoa(r.Data.User.FriendsCount)
+	if blog.Reply != nil {
+		SetProfileInfo(ctx, blog.Reply, jar)
+	}
 }
 
 type MymlogResponse struct {
@@ -214,11 +214,12 @@ func GetMymlogIter(ctx context.Context, uid int, jar http.CookieJar) func(yield 
 	return func(yield func(Mblog) bool) {
 		r, err := GetMymlog(ctx, uid, jar)
 		if err != nil {
-			logger.Errorf("failed to get mymlog by %d: %s", uid, err)
+			logger.Errorf("迭代博主 %d 的微博时出错: %s", uid, err)
+			return
 		}
 		for _, mblog := range r.Data.List {
-			if !yield(mblog) {
-				break
+			if ctx.Err() != nil || !yield(mblog) {
+				return
 			}
 		}
 	}
