@@ -12,14 +12,16 @@ import (
 	"time"
 
 	"github.com/Drelf2018/req"
-	"github.com/Drelf2018/req/cookie"
 	"github.com/playwright-community/playwright-go"
 )
 
 var browser playwright.Browser
 
-// Refresher 使用 playwright 访问微博主页进行刷新
-var Refresher cookie.Refresher = cookie.ForcedRefresher(func(ctx context.Context, jar http.CookieJar) error {
+// WeiboHomepage 用于上下文中存取微博主页的键
+type WeiboHomepage struct{}
+
+// RefreshWeiboCookie 使用 playwright 访问微博主页刷新微博 Cookie ，会尝试从上下文中读取要访问的微博主页
+func RefreshWeiboCookie(ctx context.Context, jar http.CookieJar) error {
 	// 创建浏览器上下文
 	logger.Debug("创建浏览器上下文")
 	browserContext, err := browser.NewContext()
@@ -51,7 +53,13 @@ var Refresher cookie.Refresher = cookie.ForcedRefresher(func(ctx context.Context
 	defer page.Close()
 	// 访问微博主页实现 Cookie 刷新
 	logger.Debug("访问微博主页实现 Cookie 刷新")
-	_, err = page.Goto("https://weibo.com/u/7198559139")
+	homepage := "https://weibo.com/u/7198559139"
+	if value := ctx.Value(WeiboHomepage{}); value != nil {
+		if v, ok := value.(string); ok {
+			homepage = v
+		}
+	}
+	_, err = page.Goto(homepage)
 	if err != nil {
 		return fmt.Errorf("could not goto: %w", err)
 	}
@@ -67,7 +75,7 @@ var Refresher cookie.Refresher = cookie.ForcedRefresher(func(ctx context.Context
 			return fmt.Errorf("waiting for cookie timeout: %w", ctx.Err())
 		case <-ticker.C:
 			logger.Debug("开始获取 Cookie")
-			pwCookies, err := browserContext.Cookies("https://weibo.com/u/7198559139")
+			pwCookies, err := browserContext.Cookies(homepage)
 			if err != nil {
 				return fmt.Errorf("cookie not found: %w", err)
 			}
@@ -99,28 +107,20 @@ var Refresher cookie.Refresher = cookie.ForcedRefresher(func(ctx context.Context
 			api := Upload{File: bytes.NewReader(img)}
 			uuid, err := req.JSONWithContext(ctx, api)
 			if err != nil {
-				saki.WithField("title", "微博截屏上传失败").Error(err)
+				saki.WithField("title", "截屏上传失败").Error(err)
 				return nil
 			}
 			saki.WithField("title", "微博刷新成功").Infof("![](%s/%s)", api.RawURL(), uuid)
 			return nil
 		}
 	}
-})
+}
 
 // CookieJar 每次设置 Cookie 时将其保存在本地
 type CookieJar struct {
 	http.CookieJar
 	UID int
 }
-
-func (c *CookieJar) OnError(err error) {
-	if err != nil {
-		saki.WithField("title", "微博刷新失败").Error(err)
-	}
-}
-
-var _ interface{ OnError(error) } = (*CookieJar)(nil)
 
 func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	// 更新底层 http.CookieJar
@@ -130,7 +130,10 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	for _, cookie := range c.CookieJar.Cookies(session.BaseURL) {
 		req.AddCookie(cookie)
 	}
-	c.OnError(os.WriteFile(strconv.Itoa(c.UID)+".cookie", []byte(req.Header.Get("Cookie")), os.ModePerm))
+	err := os.WriteFile(strconv.Itoa(c.UID)+".cookie", []byte(req.Header.Get("Cookie")), os.ModePerm)
+	if err != nil {
+		saki.WithField("title", "保存 Cookie 失败").Error(err)
+	}
 }
 
 func NewCookieJar(uid int) (*CookieJar, error) {

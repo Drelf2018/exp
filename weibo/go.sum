@@ -1,11 +1,11 @@
-github.com/Drelf2018/dingtalk v0.0.0-20260114080441-911465ac97cf h1:JwWTg2KlfjfcXzpr8GGWtGBRsnnwjjCTVYfjBEveDaA=
-github.com/Drelf2018/dingtalk v0.0.0-20260114080441-911465ac97cf/go.mod h1:YECT11cObhBPp8GSAvm7AcQ9XN33z1Yx9t15QqW8QSc=
-github.com/Drelf2018/exp/hook v0.0.0-20260116180838-1bb2f0d14a66 h1:Mn5Pw36YJF5SNLE3A27PXMO6dfDjsJgj1maqE7hiPpA=
-github.com/Drelf2018/exp/hook v0.0.0-20260116180838-1bb2f0d14a66/go.mod h1:HcGkWfgABzCSCyHmB81nTLugWhLxYC90B6v/KL/zVDE=
+github.com/Drelf2018/dingtalk v0.0.0-20260119185921-eb58aad0f621 h1:ShKeQ5Lprr+bGLj/Oi8yYuo973dYi+7gRO8y+BHGusk=
+github.com/Drelf2018/dingtalk v0.0.0-20260119185921-eb58aad0f621/go.mod h1:xeRG7iODxWO1hRP/rC5G8jCiqgFbyKAj3VFj1mW4RPU=
+github.com/Drelf2018/exp/hook v0.0.0-20260119191106-31d2ae1421de h1:i7kf/0VQJKtYE3QnojZAR/p/jqGkIJp3lfiyhpa+dC4=
+github.com/Drelf2018/exp/hook v0.0.0-20260119191106-31d2ae1421de/go.mod h1:pdCofc6mwO71qxolLKI/C+YotHUEnRedLSg4ozy7hVA=
 github.com/Drelf2018/exp/model v0.0.0-20260117091714-86e1c26640c1 h1:9YWBBuFJl2/5JdM4b26AW0KTGGbhC3ymnybrXrcEhS4=
 github.com/Drelf2018/exp/model v0.0.0-20260117091714-86e1c26640c1/go.mod h1:bKL6hBXYz7D94GfgUV20pomEEJlhZtGLHaWhrKgLF7E=
-github.com/Drelf2018/req v0.0.0-20260115180300-6ed8f11b1b73 h1:bYlpiGbjsX1eKF0wtbNJncQ/IqOIbjC8kt6HDNe7j+Y=
-github.com/Drelf2018/req v0.0.0-20260115180300-6ed8f11b1b73/go.mod h1:SgQkhv/iD3+Sqvg9KCqiElH7jaXMl4OWGBKHd6MJoCE=
+github.com/Drelf2018/req v0.0.0-20260119155603-2094703bdf97 h1:tOWzEEsbqZMdfj6A4FFJqemyhN7AAIniQHtZixLf6ak=
+github.com/Drelf2018/req v0.0.0-20260119155603-2094703bdf97/go.mod h1:SgQkhv/iD3+Sqvg9KCqiElH7jaXMl4OWGBKHd6MJoCE=
 github.com/Drelf2018/req/template v0.0.0-20260115180300-6ed8f11b1b73 h1:avCDdXzvq8Vccdc4W1kEtxACWkjR5Z41vvFZTjkAJjw=
 github.com/Drelf2018/req/template v0.0.0-20260115180300-6ed8f11b1b73/go.mod h1:d+sCakw5N1dyM4cowNTtALDYWGtaqoq8eUPhDNZZido=
 github.com/PuerkitoBio/goquery v1.9.3 h1:mpJr/ikUA9/GNJB/DBZcGeFDXUtosHRyRrwh7KGdTG0=
@@ -55,6 +55,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
+github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
+github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
 github.com/rogpeppe/go-internal v1.11.0 h1:cWPaGQEPrBb5/AsnsZesgZZ9yb1OQ+GOISoDNXVBh4M=
 github.com/rogpeppe/go-internal v1.11.0/go.mod h1:ddIwULY96R17DhadqLgMfk9H9tvdUzkipdSkR5nkCZA=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=

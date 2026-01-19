@@ -48,6 +48,7 @@ type ProfileInfoResponse struct {
 	Ok   int `json:"ok"`
 	Data struct {
 		User struct {
+			ScreenName        string `json:"screen_name"`
 			Description       string `json:"description"`
 			FollowersCountStr string `json:"followers_count_str"`
 			FriendsCount      int    `json:"friends_count"`
@@ -147,7 +148,7 @@ func (mblog *Mblog) ToBlog() *model.Blog {
 		},
 	}
 	// 判断是否为点赞了微博
-	if strings.HasSuffix(blog.Title, "赞过的微博") {
+	if strings.Contains(blog.Title, "赞过的") {
 		blog.Type = "like"
 	}
 	// 解析时间
@@ -173,6 +174,7 @@ func (mblog *Mblog) ToBlog() *model.Blog {
 func SetProfileInfo(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
 	var r ProfileInfoResponse
 	r, blog.Extra["profile_info_error"] = GetProfileInfo(ctx, blog.UID, jar)
+	blog.Name = r.Data.User.ScreenName
 	blog.Desc = r.Data.User.Description
 	blog.Banner, _, _ = strings.Cut(r.Data.User.CoverImagePhone, ";")
 	blog.Follower = r.Data.User.FollowersCountStr

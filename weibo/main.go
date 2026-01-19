@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
-	"path/filepath"
+	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/Drelf2018/dingtalk"
@@ -12,8 +15,10 @@ import (
 	"github.com/Drelf2018/req"
 	"github.com/Drelf2018/req/cookie"
 	"github.com/glebarez/sqlite"
+	"github.com/google/uuid"
 	"github.com/jessevdk/go-flags"
 	"github.com/playwright-community/playwright-go"
+	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -21,6 +26,7 @@ import (
 type Options struct {
 	Me       int           `short:"m" long:"me" description:"你的微博 UID"`
 	Target   int           `short:"t" long:"target" description:"监控目标 UID"`
+	Crontab  string        `short:"c" long:"crontab" description:"刷新 Cookie 任务"`
 	Database string        `short:"d" long:"database" description:"数据库文件路径"`
 	Saki     *dingtalk.Bot `group:"Saki" description:"小祥钉钉机器人"`
 }
@@ -53,9 +59,38 @@ func init() {
 	saki = logger.WithField(hook.DingTalk, options.Saki.Name)
 }
 
+// BlogMsg 博文模板
+type BlogMsg dingtalk.ActionCard
+
+func (BlogMsg) Type() dingtalk.MsgType {
+	return dingtalk.MsgActionCard
+}
+
+// 初始化博文模板
+func init() {
+	err := options.Saki.Funcs(template.FuncMap{"suffix": strings.HasSuffix, "prefix": hook.Prefix}).Parse(BlogMsg{
+		Title:     " {{.}}",
+		Text:      "{{if .Banner}}![]({{.Banner}})\n\n{{end}}{{template \"blog\" .}}",
+		SingleURL: "{{.URL}}",
+	})
+	if err != nil {
+		logger.Panicln("创建博文模板失败:", err)
+	}
+	err = options.Saki.NewTemplate("blog", `### {{.Name}}{{if (and .Title (ne .Type "like"))}} {{.Title}}{{end}}
+
+{{prefix .Plaintext "#### "}}{{range $idx, $asset := .Assets}}{{if or (suffix $asset ".jpg") (suffix $asset ".jpeg") (suffix $asset ".png")}}
+
+![]({{$asset}}){{end}}{{end}}{{if .Reply}}
+
+{{template "blog" .Reply}}{{end}}`)
+	if err != nil {
+		logger.Panicln("创建博文子模板失败:", err)
+	}
+}
+
 // 初始化数据库
 func init() {
-	logger.Debug("初始化数据库")
+	logger.Info("初始化数据库")
 	var err error
 	db, err = gorm.Open(sqlite.Open(options.Database))
 	if err != nil {
@@ -67,131 +102,111 @@ func init() {
 	}
 }
 
-// NextTimeDuration 返回距离下次指定时间的间隔
-func NextTimeDuration(hour, min, sec int) time.Duration {
-	now := time.Now()
-	next := time.Date(now.Year(), now.Month(), now.Day(), hour, min, sec, 0, now.Location())
-	switch {
-	case now.Hour() > hour,
-		now.Hour() == hour && now.Minute() > min,
-		now.Hour() == hour && now.Minute() == min && now.Second() > sec:
-		next = next.AddDate(0, 0, 1)
-	}
-	return time.Until(next)
-}
-
 // 初始化浏览器
 func init() {
-	logger.Debug("安装 playwright")
+	logger.Info("安装 playwright")
 	// 安装 playwright
 	err := playwright.Install()
 	if err != nil {
 		logger.Panicln("安装 playwright 失败:", err)
 	}
 	// 启动 playwright
-	logger.Debug("启动 playwright")
+	logger.Info("启动 playwright")
 	pw, err := playwright.Run()
 	if err != nil {
 		logger.Panicln("启动 playwright 失败:", err)
 	}
 	// 启动 Chromium 浏览器
-	logger.Debug("启动 Chromium 浏览器")
+	logger.Info("启动 Chromium 浏览器")
 	browser, err = pw.Chromium.Launch()
 	if err != nil {
 		logger.Panicln("启动 Chromium 浏览器失败:", err)
 	}
-	// 开启 Cookie 保活
+	// 获取 Cookie 对象
+	logger.Info("获取 Cookie 对象")
 	jar, err = NewCookieJar(options.Me)
 	if err != nil {
 		logger.Panicln("读取 cookie 失败:", err)
 	}
-	time.AfterFunc(NextTimeDuration(3, 0, 0), func() { cookie.Keepalive(jar, Refresher, 6*time.Hour) })
-}
-
-// RenderMarkdown 将通用博文模型格式化成 Markdown
-func RenderMarkdown(b *strings.Builder, blog *model.Blog, depth int) {
-	prefix := strings.Repeat(">", depth) + " "
-	if depth == 0 && blog.Banner != "" {
-		if depth != 0 {
-			b.WriteString(prefix)
-		}
-		b.WriteString("![](")
-		b.WriteString(blog.Banner)
-		b.WriteString(")\n")
-		if depth == 0 {
-			b.WriteByte('\n')
-		}
+	// 初始化 Cookie
+	logger.Info("初始化 Cookie")
+	err = RefreshWeiboCookie(context.Background(), jar)
+	if err != nil {
+		logger.Panicln("刷新 Cookie 失败:", err)
 	}
-	if depth != 0 {
-		b.WriteString(prefix)
+	// 开启 Cookie 保活
+	logger.Infoln("开启 Cookie 保活:", options.Crontab)
+	c := cron.New()
+	_, err = c.AddJob(options.Crontab, &cookie.KeepaliveCookieJar{
+		CookieJar: jar,
+		Refresher: cookie.ForcedRefresher(RefreshWeiboCookie),
+		OnError:   func(err error) { saki.WithField("title", "微博保活失败").Error(err) },
+	})
+	if err != nil {
+		logger.Panicln("添加任务失败:", err)
 	}
-	b.WriteString("### ")
-	b.WriteString(blog.Name)
-	if blog.Title != "" {
-		b.WriteString(" ")
-		b.WriteString(blog.Title)
-	}
-	b.WriteByte('\n')
-	if depth == 0 {
-		b.WriteByte('\n')
-	} else {
-		b.WriteString(prefix)
-	}
-	b.WriteString(strings.TrimSpace(blog.Content))
-	b.WriteByte('\n')
-	if depth == 0 {
-		b.WriteByte('\n')
-	}
-	for _, a := range blog.Assets {
-		ext := filepath.Ext(a)
-		if ext == "" || (ext != ".jpg" && ext != ".jpeg" && ext != ".png") {
-			continue
-		}
-		if depth != 0 {
-			b.WriteString(prefix)
-		}
-		b.WriteString("![](")
-		b.WriteString(a)
-		b.WriteByte(')')
-		if depth == 0 {
-			b.WriteByte('\n')
-		}
-	}
-	if blog.Reply != nil {
-		RenderMarkdown(b, blog.Reply, depth+1)
-	}
+	c.Start()
 }
 
 // send 发送通知
-func send(ctx context.Context, blog *model.Blog) {
-	var b strings.Builder
-	RenderMarkdown(&b, blog, 0)
-	err := options.Saki.SendSingleActionCardWithContext(ctx, " "+blog.String(), b.String(), "阅读全文", blog.URL)
-	if err != nil {
-		saki.Error(err)
-		err = options.Saki.SendLinkWithContext(ctx, blog.Name, blog.Plaintext, blog.Avatar, blog.URL)
-		if err != nil {
-			saki.Error(err)
+func send(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
+	if blog.Type == "like" {
+		wrapper := &model.Blog{
+			UID:       strconv.Itoa(options.Target),
+			Avatar:    blog.Avatar,
+			URL:       blog.URL,
+			Plaintext: blog.Title,
+			Extra:     model.Extra{},
 		}
+		SetProfileInfo(ctx, wrapper, jar)
+		wrapper.Reply = blog
+		blog = wrapper
+	}
+	msg := &BlogMsg{SingleTitle: "阅读全文"}
+	_, err := options.Saki.Fill(blog, msg)
+	if err != nil {
+		saki.WithField("title", "执行模板失败").Error(err)
+	} else {
+		// 重试三次，如果一直系统繁忙则切换发送方式
+		handler := dingtalk.UUID(uuid.NewString())
+		for i := range 3 {
+			if i != 0 {
+				time.Sleep((1 << i) * time.Second)
+			}
+			err := options.Saki.Send(msg, handler)
+			if err == nil {
+				return
+			}
+			if respErr, ok := err.(dingtalk.SendError); ok && respErr.ErrCode == -1 {
+				continue
+			}
+			if urlErr, ok := err.(*url.Error); ok {
+				err = urlErr.Unwrap()
+			}
+			saki.WithField("title", "发送微博失败").Error(err)
+			break
+		}
+	}
+	err = options.Saki.SendLink(blog.Name, blog.Plaintext, blog.URL, blog.Avatar)
+	if err != nil {
+		if urlErr, ok := err.(*url.Error); ok {
+			err = urlErr.Unwrap()
+		}
+		saki.WithField("title", "发送链接失败").Error(err)
 	}
 }
 
 // 轮询获取博文
 func main() {
-	var (
-		now    time.Time
-		ctx    context.Context
-		cancel context.CancelFunc
-		last   = time.Now()
-		bg     = context.Background()
-	)
+	var now time.Time
+	last := time.Now()
+	bgCtx := context.Background()
 	fetchTicker := req.NewTicker(req.RandomTicker{7 * time.Second, 10 * time.Second})
 	defer fetchTicker.Stop()
 	for now = range fetchTicker.C {
-		ctx, cancel = context.WithDeadline(bg, now.Add(7*time.Second))
 		logger.Debugf("获取微博 (+%s)", now.Sub(last))
 		last = now
-		for mblog := range GetMymlogIter(ctx, options.Target, jar) {
+		for mblog := range GetMymlogIter(bgCtx, options.Target, jar) {
 			blog := mblog.ToBlog()
 			// 当前博文未保存则写入数据库，会比较编辑次数是否有差异，如果有差异会重新写入
 			result := db.Scopes(blog.Match).Limit(1).Find(&model.Blog{})
@@ -199,21 +214,20 @@ func main() {
 				saki.WithField("title", "微博查询失败").Error(result.Error)
 				continue
 			}
-			// 已经保存过
+			// 已经保存过则跳过
 			if result.RowsAffected != 0 {
 				continue
 			}
-			// 否则先补充博主信息
-			SetProfileInfo(ctx, blog, jar)
+			// 否则补充博主信息
+			SetProfileInfo(bgCtx, blog, jar)
 			logger.Infoln("保存微博:", blog)
-			// 通知
-			go send(ctx, blog)
-			// 保存至数据库
+			// 异步通知
+			go send(bgCtx, blog, jar)
+			// 写入数据库
 			err := db.Create(blog).Error
 			if err != nil {
 				saki.WithField("title", "微博保存失败").Error(err)
 			}
 		}
-		cancel()
 	}
 }
