@@ -212,11 +212,19 @@ func GetMymlog(ctx context.Context, uid int, jar http.CookieJar) (r MymlogRespon
 	return
 }
 
+var lastSendError time.Time
+
 func GetMymlogIter(ctx context.Context, uid int, jar http.CookieJar) func(yield func(Mblog) bool) {
 	return func(yield func(Mblog) bool) {
 		r, err := GetMymlog(ctx, uid, jar)
 		if err != nil {
-			logger.Errorf("迭代博主 %d 的微博时出错: %s", uid, err)
+			now := time.Now()
+			if now.Sub(lastSendError) > 10*time.Minute {
+				bot.WithField("title", "迭代微博出错").Error(err)
+				lastSendError = now
+			} else {
+				logger.Errorln("迭代微博出错:", err)
+			}
 			return
 		}
 		for _, mblog := range r.Data.List {
