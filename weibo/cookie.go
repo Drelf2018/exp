@@ -101,16 +101,16 @@ func RefreshWeiboCookie(ctx context.Context, jar http.CookieJar) error {
 			}
 			img, err := page.Screenshot()
 			if err != nil {
-				saki.WithField("title", "微博截屏失败").Error(err)
+				bot.WithField("title", "微博截屏失败").Error(err)
 				return nil
 			}
 			api := Upload{File: bytes.NewReader(img)}
 			uuid, err := req.JSONWithContext(ctx, api)
 			if err != nil {
-				saki.WithField("title", "截屏上传失败").Error(err)
+				bot.WithField("title", "截屏上传失败").Error(err)
 				return nil
 			}
-			saki.WithField("title", "微博刷新成功").Infof("![](%s/%s)", api.RawURL(), uuid)
+			bot.WithField("title", "微博刷新成功").Infof("![](%s/%s)", api.RawURL(), uuid)
 			return nil
 		}
 	}
@@ -132,7 +132,7 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	}
 	err := os.WriteFile(strconv.Itoa(c.UID)+".cookie", []byte(req.Header.Get("Cookie")), os.ModePerm)
 	if err != nil {
-		saki.WithField("title", "保存 Cookie 失败").Error(err)
+		bot.WithField("title", "保存 Cookie 失败").Error(err)
 	}
 }
 
