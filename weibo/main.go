@@ -138,7 +138,7 @@ func (BlogMsg) Type() dingtalk.MsgType {
 func init() {
 	err := options.DingTalk.Funcs(template.FuncMap{"suffix": strings.HasSuffix, "prefix": hook.Prefix}).Parse(BlogMsg{
 		Title:     " {{.}}",
-		Text:      "{{if .Banner}}![]({{.Banner}})\n\n{{end}}{{template \"blog\" .}}",
+		Text:      "{{if .Banner}}![]({{.Banner}})\n\n{{end}}{{template \"blog\" .}}\n\n###### {{.Time.Format \"2006-01-02 15:04:05\"}}",
 		SingleURL: "{{.URL}}",
 	})
 	if err != nil {
