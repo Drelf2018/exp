@@ -4,19 +4,21 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/Drelf2018/dingtalk"
 	"github.com/sirupsen/logrus"
+	stripmd "github.com/writeas/go-strip-markdown"
 )
 
 // DingTalk 钉钉键
 const DingTalk string = "dingtalk"
 
 // LoggerMsg 钉钉日志模板消息
-type LoggerMsg dingtalk.Markdown
+type LoggerMsg dingtalk.ActionCard
 
 func (LoggerMsg) Type() dingtalk.MsgType {
-	return dingtalk.MsgMarkdown
+	return dingtalk.MsgActionCard
 }
 
 // DingTalkHook 钉钉机器人钩子
@@ -57,6 +59,29 @@ func (d *DingTalkHook) Bind(logger *logrus.Logger) *logrus.Entry {
 	return logger.WithField(DingTalk, d.Bot.Name)
 }
 
+// FirstLine 生成通知日志的首行
+func FirstLine(entry *logrus.Entry) string {
+	if value, ok := entry.Data["header"]; ok {
+		if header, ok := value.(string); ok {
+			return header
+		}
+	}
+	b := &strings.Builder{}
+	b.WriteByte('[')
+	b.WriteString(strings.ToUpper(entry.Level.String()))
+	b.WriteByte(']')
+	if value, ok := entry.Data["title"]; ok {
+		if title, ok := value.(string); ok {
+			b.WriteByte(' ')
+			b.WriteString(title)
+		}
+	} else if entry.Caller != nil {
+		b.WriteByte(' ')
+		b.WriteString(filepath.Base(entry.Caller.File))
+	}
+	return b.String()
+}
+
 // Prefix 为每行字符串添加前缀
 func Prefix(s, prefix string) string {
 	parts := strings.Split(s, "\n")
@@ -67,12 +92,18 @@ func Prefix(s, prefix string) string {
 	return strings.Join(newParts, "\n")
 }
 
+// TimeFormat 格式化时间
+func TimeFormat(t time.Time) string {
+	return t.Format("2006-01-02 15:04:05")
+}
+
 // NewDingTalkHook 创建钉钉机器人钩子，日志等级为空时视为全部等级
 func NewDingTalkHook(bot *dingtalk.Bot, levels ...logrus.Level) *DingTalkHook {
-	bot.Funcs(template.FuncMap{"upper": strings.ToUpper, "base": filepath.Base, "prefix": Prefix}).Parse(LoggerMsg{
-		Title: " {{template \"title\" .}}\n{{.Message}}\n{{.Time.Format \"2006-01-02 15:04:05\"}}",
-		Text:  "### {{template \"title\" .}}\n\n{{prefix .Message \"#### \"}}\n\n###### {{.Time.Format \"2006-01-02 15:04:05\"}}",
+	bot.Funcs(template.FuncMap{"titlef": FirstLine, "prefix": Prefix, "stripmd": stripmd.Strip, "timef": TimeFormat}).Parse(LoggerMsg{
+		Title:       " {{titlef .}}\n{{if stripmd .Message}}{{stripmd .Message}}\n{{end}}{{timef .Time}}",
+		Text:        "{{if .Data.banner}}{{.Data.banner}}\n{{end}}### {{titlef .}}\n\n{{prefix .Message \"#### \"}}\n\n###### {{timef .Time}}",
+		SingleTitle: "{{if .Data.button}}{{.Data.button}}{{end}}",
+		SingleURL:   "{{if .Data.url}}{{.Data.url}}{{end}}",
 	})
-	bot.NewTemplate("title", `[{{upper .Level.String}}] {{if .Data.title}}{{.Data.title}}{{else}}{{base .Caller.File}}{{end}}`)
 	return &DingTalkHook{Bot: bot, levels: levels}
 }
