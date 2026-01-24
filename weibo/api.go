@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -233,13 +232,4 @@ func GetMymlogIter(ctx context.Context, uid int, jar http.CookieJar) func(yield 
 			}
 		}
 	}
-}
-
-type Upload struct {
-	req.PostMultipartForm
-	File io.Reader `req:"body"`
-}
-
-func (Upload) RawURL() string {
-	return "http://serverless.nana7mi.link/api/file"
 }

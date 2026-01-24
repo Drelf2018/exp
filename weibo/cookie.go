@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -11,9 +12,27 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Drelf2018/req"
 	"github.com/playwright-community/playwright-go"
+	"github.com/qiniu/go-sdk/v7/storagev2/uploader"
+	"github.com/sirupsen/logrus"
 )
+
+// Upload 上传文件至七牛云
+func Upload(ctx context.Context, reader io.Reader) error {
+	err := bucket.Object(options.Qiniu.Screenshot).Delete().Call(ctx)
+	if err != nil {
+		logger.Errorf("删除文件失败: %s", err)
+	}
+	err = qiniu.UploadReader(ctx, reader, &uploader.ObjectOptions{
+		BucketName: bucket.Name(),
+		ObjectName: &options.Qiniu.Screenshot,
+		FileName:   options.Qiniu.Screenshot,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("上传文件失败: %w", err)
+	}
+	return nil
+}
 
 var browser playwright.Browser
 
@@ -104,13 +123,15 @@ func RefreshWeiboCookie(ctx context.Context, jar http.CookieJar) error {
 				bot.WithField("title", "微博截屏失败").Error(err)
 				return nil
 			}
-			api := Upload{File: bytes.NewReader(img)}
-			uuid, err := req.JSONWithContext(ctx, api)
+			err = Upload(ctx, bytes.NewReader(img))
 			if err != nil {
 				bot.WithField("title", "截屏上传失败").Error(err)
 				return nil
 			}
-			bot.WithField("title", "微博刷新成功").Infof("![](%s/%s)", api.RawURL(), uuid)
+			bot.WithFields(logrus.Fields{
+				"banner": fmt.Sprintf("![](https://yun.nana7mi.link/%s)", options.Qiniu.Screenshot),
+				"title":  "微博刷新成功",
+			}).Info()
 			return nil
 		}
 	}

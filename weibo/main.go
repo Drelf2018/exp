@@ -23,8 +23,19 @@ import (
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
+	"github.com/qiniu/go-sdk/v7/storagev2/credentials"
+	"github.com/qiniu/go-sdk/v7/storagev2/downloader"
+	"github.com/qiniu/go-sdk/v7/storagev2/http_client"
+	"github.com/qiniu/go-sdk/v7/storagev2/objects"
+	"github.com/qiniu/go-sdk/v7/storagev2/uploader"
 	sloglogrus "github.com/samber/slog-logrus/v2"
 )
+
+type Qiniu struct {
+	AccessKey  string `long:"accessKey" description:"七牛云 AccessKey"`
+	SecretKey  string `long:"secretKey" description:"七牛云 SecretKey"`
+	Screenshot string `long:"screenshot" description:"截图文件名"`
+}
 
 type Options struct {
 	Me       int           `short:"m" long:"me" description:"你的微博 UID"`
@@ -33,14 +44,18 @@ type Options struct {
 	Crontab  string        `short:"c" long:"crontab" description:"刷新 Cookie 任务"`
 	Database string        `short:"d" long:"database" description:"数据库文件路径"`
 	DingTalk *dingtalk.Bot `group:"DingTalk" description:"钉钉机器人"`
+	Qiniu    Qiniu         `group:"Qiniu" description:"七牛云凭证"`
 }
 
 var (
-	options Options
-	logger  *logrus.Logger
-	bot     *logrus.Entry
-	jar     *CookieJar
-	db      *gorm.DB
+	options      Options
+	logger       *logrus.Logger
+	bot          *logrus.Entry
+	jar          *CookieJar
+	db           *gorm.DB
+	qiniu        *uploader.UploadManager
+	urlsProvider downloader.DownloadURLsProvider
+	bucket       *objects.Bucket
 )
 
 // 获取运行参数
@@ -62,6 +77,21 @@ func init() {
 	ding := hook.NewDingTalkHook(options.DingTalk)
 	logger = hook.New(logrus.InfoLevel, hook.NewDailyFileHook(options.Logger), ding)
 	bot = ding.Bind(logger)
+}
+
+// 初始化七牛云
+func init() {
+	mac := credentials.NewCredentials(options.Qiniu.AccessKey, options.Qiniu.SecretKey)
+	qiniu = uploader.NewUploadManager(&uploader.UploadManagerOptions{
+		Options: http_client.Options{
+			Credentials: mac,
+		},
+	})
+	urlsProvider = downloader.SignURLsProvider(downloader.NewDefaultSrcURLsProvider(mac.AccessKey, nil), downloader.NewCredentialsSigner(mac), nil)
+	objectsManager := objects.NewObjectsManager(&objects.ObjectsManagerOptions{
+		Options: http_client.Options{Credentials: mac},
+	})
+	bucket = objectsManager.Bucket("apex12138")
 }
 
 // 初始化浏览器
@@ -157,17 +187,18 @@ func init() {
 }
 
 // send 发送通知
-func send(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
+func send(ctx context.Context, blog model.Blog, jar http.CookieJar) {
 	if blog.Type == "like" {
-		wrapper := &model.Blog{
+		wrapper := model.Blog{
 			UID:       strconv.Itoa(options.Target),
 			Avatar:    blog.Avatar,
 			URL:       blog.URL,
+			Time:      blog.Time,
 			Plaintext: blog.Title,
 			Extra:     model.Extra{},
 		}
-		SetProfileInfo(ctx, wrapper, jar)
-		wrapper.Reply = blog
+		SetProfileInfo(ctx, &wrapper, jar)
+		wrapper.Reply = &blog
 		blog = wrapper
 	}
 	msg := &BlogMsg{SingleTitle: "阅读全文"}
@@ -231,7 +262,7 @@ func main() {
 			SetProfileInfo(bgCtx, blog, jar)
 			logger.Infoln("保存微博:", blog)
 			// 异步通知
-			go send(bgCtx, blog, jar)
+			go send(bgCtx, *blog, jar)
 			// 写入数据库
 			err := db.Create(blog).Error
 			if err != nil {
