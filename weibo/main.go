@@ -32,9 +32,8 @@ import (
 )
 
 type Qiniu struct {
-	AccessKey  string `long:"accessKey" description:"七牛云 AccessKey"`
-	SecretKey  string `long:"secretKey" description:"七牛云 SecretKey"`
-	Screenshot string `long:"screenshot" description:"截图文件名"`
+	AccessKey string `long:"accessKey" description:"七牛云 AccessKey"`
+	SecretKey string `long:"secretKey" description:"七牛云 SecretKey"`
 }
 
 type Options struct {
