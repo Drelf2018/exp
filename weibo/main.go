@@ -24,7 +24,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/qiniu/go-sdk/v7/storagev2/credentials"
-	"github.com/qiniu/go-sdk/v7/storagev2/downloader"
 	"github.com/qiniu/go-sdk/v7/storagev2/http_client"
 	"github.com/qiniu/go-sdk/v7/storagev2/objects"
 	"github.com/qiniu/go-sdk/v7/storagev2/uploader"
@@ -47,14 +46,14 @@ type Options struct {
 }
 
 var (
-	options      Options
-	logger       *logrus.Logger
-	bot          *logrus.Entry
-	jar          *CookieJar
-	db           *gorm.DB
-	qiniu        *uploader.UploadManager
-	urlsProvider downloader.DownloadURLsProvider
-	bucket       *objects.Bucket
+	options Options
+	logger  *logrus.Logger
+	bot     *logrus.Entry
+	jar     *CookieJar
+	db      *gorm.DB
+	tmpl    *template.Template
+	qiniu   *uploader.UploadManager
+	bucket  *objects.Bucket
 )
 
 // 获取运行参数
@@ -86,7 +85,6 @@ func init() {
 			Credentials: mac,
 		},
 	})
-	urlsProvider = downloader.SignURLsProvider(downloader.NewDefaultSrcURLsProvider(mac.AccessKey, nil), downloader.NewCredentialsSigner(mac), nil)
 	objectsManager := objects.NewObjectsManager(&objects.ObjectsManagerOptions{
 		Options: http_client.Options{Credentials: mac},
 	})
@@ -156,24 +154,15 @@ func init() {
 	}
 }
 
-// BlogMsg 博文模板
-type BlogMsg dingtalk.ActionCard
-
-func (BlogMsg) Type() dingtalk.MsgType {
-	return dingtalk.MsgActionCard
-}
-
 // 初始化博文模板
 func init() {
-	err := options.DingTalk.Funcs(template.FuncMap{"suffix": strings.HasSuffix, "prefix": hook.Prefix}).Parse(BlogMsg{
-		Title:     " {{.}}",
-		Text:      "{{if .Banner}}![]({{.Banner}})\n\n{{end}}{{template \"blog\" .}}\n\n###### {{.Time.Format \"2006-01-02 15:04:05\"}}",
-		SingleURL: "{{.URL}}",
-	})
+	var err error
+	funcMap := template.FuncMap{"suffix": strings.HasSuffix, "prefix": hook.Prefix, "timef": hook.TimeFormat}
+	tmpl, err = template.New("").Funcs(funcMap).Parse("{{if .Banner}}![]({{.Banner}})\n\n{{end}}{{template \"blog\" .}}\n\n###### {{timef .Time}}")
 	if err != nil {
 		logger.Panicln("创建博文模板失败:", err)
 	}
-	err = options.DingTalk.NewTemplate("blog", `### {{.Name}}{{if (and .Title (ne .Type "like"))}} {{.Title}}{{end}}
+	_, err = tmpl.New("blog").Parse(`### {{.Name}}{{if (and .Title (ne .Type "like"))}} {{.Title}}{{end}}
 
 {{prefix .Plaintext "#### "}}{{range $idx, $asset := .Assets}}{{if or (suffix $asset ".jpg") (suffix $asset ".jpeg") (suffix $asset ".png")}}
 
@@ -185,10 +174,21 @@ func init() {
 	}
 }
 
+// sendLink 发送链接
+func sendLink(ctx context.Context, blog *model.Blog) {
+	err := options.DingTalk.SendLinkWithContext(ctx, blog.Name, blog.Plaintext, blog.URL, blog.Avatar)
+	if err != nil {
+		if urlErr, ok := err.(*url.Error); ok {
+			err = urlErr.Unwrap()
+		}
+		bot.WithField("title", "发送链接失败").Error(err)
+	}
+}
+
 // send 发送通知
-func send(ctx context.Context, blog model.Blog, jar http.CookieJar) {
+func send(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
 	if blog.Type == "like" {
-		wrapper := model.Blog{
+		wrapper := &model.Blog{
 			UID:       strconv.Itoa(options.Target),
 			Avatar:    blog.Avatar,
 			URL:       blog.URL,
@@ -196,42 +196,44 @@ func send(ctx context.Context, blog model.Blog, jar http.CookieJar) {
 			Plaintext: blog.Title,
 			Extra:     model.Extra{},
 		}
-		SetProfileInfo(ctx, &wrapper, jar)
-		wrapper.Reply = &blog
+		SetProfileInfo(ctx, wrapper, jar)
+		wrapper.Reply = blog
 		blog = wrapper
 	}
-	msg := &BlogMsg{SingleTitle: "阅读全文"}
-	_, err := options.DingTalk.Fill(blog, msg)
+	var b strings.Builder
+	err := tmpl.Execute(&b, blog)
 	if err != nil {
+		// 执行模板失败，退避为发送链接
 		bot.WithField("title", "执行模板失败").Error(err)
-	} else {
-		// 重试三次，如果一直系统繁忙则切换发送方式
-		handler := dingtalk.UUID(uuid.NewString())
-		for i := range 3 {
-			if i != 0 {
-				time.Sleep((1 << i) * time.Second)
-			}
-			err := options.DingTalk.Send(msg, handler)
-			if err == nil {
-				return
-			}
-			if respErr, ok := err.(dingtalk.SendError); ok && respErr.ErrCode == -1 {
-				continue
-			}
-			if urlErr, ok := err.(*url.Error); ok {
-				err = urlErr.Unwrap()
-			}
-			bot.WithField("title", "发送微博失败").Error(err)
-			break
-		}
+		sendLink(ctx, blog)
+		return
 	}
-	err = options.DingTalk.SendLink(blog.Name, blog.Plaintext, blog.URL, blog.Avatar)
-	if err != nil {
+	// 构造卡片
+	msg := &dingtalk.ActionCard{Title: " " + blog.String(), Text: b.String(), SingleTitle: "阅读全文", SingleURL: blog.URL}
+	// 重试三次，如果一直系统繁忙则切换发送方式
+	msgUUID := dingtalk.UUID(uuid.NewString())
+	for i := range 3 {
+		if i != 0 {
+			time.Sleep((1 << i) * time.Second)
+		}
+		// 发送成功，直接返回
+		err = options.DingTalk.Send(msg, msgUUID)
+		if err == nil {
+			return
+		}
+		// 服务器系统繁忙，等待后重试
+		if respErr, ok := err.(dingtalk.SendError); ok && respErr.ErrCode == -1 {
+			continue
+		}
+		// 其他错误，不再重试
 		if urlErr, ok := err.(*url.Error); ok {
 			err = urlErr.Unwrap()
 		}
-		bot.WithField("title", "发送链接失败").Error(err)
+		break
 	}
+	// 发送卡片失败，退避为发送链接
+	bot.WithField("title", "发送微博失败").Error(err)
+	sendLink(ctx, blog)
 }
 
 // 轮询获取微博
@@ -261,7 +263,8 @@ func main() {
 			SetProfileInfo(bgCtx, blog, jar)
 			logger.Infoln("保存微博:", blog)
 			// 异步通知
-			go send(bgCtx, *blog, jar)
+			sendBlog := *blog
+			go send(bgCtx, &sendBlog, jar)
 			// 写入数据库
 			err := db.Create(blog).Error
 			if err != nil {
