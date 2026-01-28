@@ -1,159 +1,290 @@
 package main
 
 import (
-	"flag"
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
+	"os"
+	"strings"
 	"time"
 
-	"github.com/Drelf2018/exp/drink/bilibili"
-	"github.com/Drelf2018/exp/drink/db"
+	"github.com/Drelf2018/dingtalk"
 	"github.com/Drelf2018/exp/hook"
+	bilibili "github.com/Drelf2018/go-bilibili-api"
+	"github.com/Drelf2018/go-bilibili-api/cookie"
 	"github.com/Drelf2018/req"
-	"github.com/Drelf2018/req/cookie"
+	"github.com/glebarez/sqlite"
+	"github.com/jessevdk/go-flags"
 	"github.com/sirupsen/logrus"
 	"github.com/skip2/go-qrcode"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-var logger = hook.New(logrus.InfoLevel, hook.NewDailyFileHook("logs/2006-01-02.log"), hook.NewDingTalkHook(hook.Saki))
-var saki = logger.WithField(hook.DingTalk, hook.Saki.Name)
-
-// bilibili Cookie 保活
-type CookieJar struct {
-	http.CookieJar
-
-	// 所属用户 UID
-	UID int
+type Options struct {
+	Sleep    int           `long:"sleep" description:"休眠小时"`
+	Drinks   string        `long:"drinks" description:"饮料文件路径"`
+	Logger   string        `long:"logger" description:"日志文件路径"`
+	QRCode   string        `long:"qrcode" description:"扫码登录文件路径"`
+	Database string        `long:"database" description:"数据库文件路径"`
+	DingTalk *dingtalk.Bot `group:"DingTalk" description:"钉钉机器人"`
 }
 
-func (*CookieJar) OnError(err error) {
-	if err != nil {
-		saki.Error(err)
-	}
-}
-
-func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
-	c.CookieJar.SetCookies(u, cookies)
-	err := db.UpdateUserCookies(c.UID, cookies)
-	if err != nil {
-		logger.Error(err)
-	}
+type Drink struct {
+	Name      string `gorm:"primarykey"`
+	Value     string
+	CreatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 var (
-	uid     int
-	drinks  string
-	cookies string
+	options Options
+	logger  *logrus.Logger
+	bot     *logrus.Entry
+	jar     http.CookieJar
+	db      *gorm.DB
 )
 
+// 获取运行参数
 func init() {
-	flag.IntVar(&uid, "uid", 0, "uid")
-	flag.StringVar(&drinks, "drinks", "drinks.json", "drinks")
-	flag.StringVar(&cookies, "cookies", "cookies.db", "cookies")
-	flag.Parse()
+	// 解析默认配置文件
+	err := flags.IniParse("config.ini", &options)
+	if err != nil {
+		logrus.Panic(err)
+	}
+	// 解析命令行参数
+	_, err = flags.Parse(&options)
+	if err != nil {
+		logrus.Panic(err)
+	}
+	// 初始化日志
+	ding := hook.NewDingTalkHook(options.DingTalk)
+	logger = hook.New(logrus.InfoLevel, hook.NewDailyFileHook(options.Logger), ding)
+	bot = ding.Bind(logger)
+}
+
+// 初始化数据库
+func init() {
+	var err error
+	logger.Info("初始化数据库")
+	db, err = gorm.Open(sqlite.Open(options.Database))
+	if err != nil {
+		logger.Panicln("创建数据库失败:", err)
+	}
+	err = db.AutoMigrate(&cookie.Refresher{}, &cookie.Cookie{}, &Drink{})
+	if err != nil {
+		logger.Panicln("自动迁移数据库失败:", err)
+	}
+	// 打开数据库，写入饮品
+	if options.Drinks == "" {
+		return
+	}
+	logger.Info("初始化饮料")
+	data, err := os.ReadFile(options.Drinks)
+	if err != nil {
+		logger.Panicln("读取饮料失败:", err)
+	}
+	var drinksSlice []string
+	err = json.Unmarshal(data, &drinksSlice)
+	if err != nil {
+		logger.Panicln("反序列化饮料失败:", err)
+	}
+	drinks := make([]*Drink, 0, len(drinksSlice))
+	for _, d := range drinksSlice {
+		name, _, _ := strings.Cut(strings.TrimPrefix(d, "我今天喝了"), "，")
+		drinks = append(drinks, &Drink{Name: name, Value: d})
+	}
+	err = db.Clauses(clause.OnConflict{DoNothing: true}).Create(drinks).Error
+	if err != nil {
+		logger.Panicln("写入饮料失败:", err)
+	}
+}
+
+// 扫码登录
+func init() {
+	if options.QRCode != "" {
+		logger.Info("扫码登录")
+		generate, err := bilibili.GetGenerate(context.Background())
+		if err != nil {
+			logger.Panicln("申请二维码失败:", err)
+		}
+		logger.Info(generate.Data.URL)
+		err = qrcode.WriteFile(generate.Data.URL, qrcode.Low, 200, options.QRCode)
+		if err != nil {
+			logger.Panicln("导出二维码失败:", err)
+		}
+		var cred *bilibili.Credential
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			cred, err = bilibili.GetCredential(context.Background(), generate.Data.QRCodeKey)
+			if err == nil {
+				break
+			}
+			logger.Errorln("扫码登录失败:", err)
+		}
+		err = db.Save(&cookie.Refresher{Token: cred.RefreshToken, Jar: cred}).Error
+		if err != nil {
+			logger.Panicln("凭据写入数据库失败:", err)
+		}
+	}
+}
+
+// 初始化 Cookie
+func init() {
+	logger.Info("初始化 Cookie")
+	r := &cookie.Refresher{}
+	err := db.Preload("Cookies").Order("id DESC").First(r).Error
+	if err != nil {
+		logger.Panicln("从数据库读取凭据失败:", err)
+	}
+	jar = r.Jar
+}
+
+type BizExtra struct {
+	// 留言内容
+	Msg string `json:"msg"`
+
+	// 留言级别
+	Level int `json:"level"`
+
+	// 礼物序号，与级别有对应关系 (1, 8) / (2, 14) / (3, 3) / (4, 12) / (5, 5) / (6, 6)
+	BizID int `json:"biz_id"`
+
+	TransKey  string `json:"trans_key"`
+	ScImageID int    `json:"sc_image_id"`
+}
+
+// CreateOrder 创建订单
+type CreateOrder struct {
+	bilibili.PostCSRF
+	http.CookieJar
+
+	// 房间号
+	ContextID int `req:"body"`
+
+	// 主播 UID
+	Ruid int `req:"body"`
+
+	// 100 倍电池
+	PayGold int `req:"body"`
+
+	BizExtra    BizExtra `req:"body"`
+	ContextType int      `req:"body" default:"1"`
+	GoodsID     int      `req:"body" default:"12"`
+	GoodsNum    int      `req:"body" default:"1"`
+	Platform    string   `req:"body" default:"pc"`
+}
+
+func (CreateOrder) RawURL() string {
+	return "https://api.live.bilibili.com/xlive/revenue/v1/order/createOrder"
+}
+
+type CreateOrderResponse struct {
+	bilibili.Error
+	Data struct {
+		Bp        int    `json:"bp"`
+		ErrorInfo any    `json:"error_info"`
+		Gold      int    `json:"gold"`
+		OrderID   string `json:"order_id"`
+		Status    int    `json:"status"`
+	} `json:"data"`
+}
+
+// PostSuperchat 发送醒目留言
+func PostSuperchat(ctx context.Context, jar http.CookieJar, roomid int, battery int, msg string) (CreateOrderResponse, error) {
+	if battery%10 != 0 {
+		return CreateOrderResponse{}, fmt.Errorf("bilibili: battery count is not divisible by ten: %d", battery)
+	}
+	if battery < 300 {
+		return CreateOrderResponse{}, fmt.Errorf("bilibili: minimum payment: 300 batteries, got: %d", battery)
+	}
+	info, err := bilibili.GetRoomInfo(ctx, roomid)
+	if err != nil {
+		return CreateOrderResponse{}, fmt.Errorf("bilibili: get uid error: %w", err)
+	}
+	api := &CreateOrder{CookieJar: jar, ContextID: roomid, Ruid: info.Data.UID, PayGold: battery * 100}
+	if battery >= 20000 {
+		api.BizExtra = BizExtra{Msg: msg, Level: 6, BizID: 6}
+	} else if battery >= 10000 {
+		api.BizExtra = BizExtra{Msg: msg, Level: 5, BizID: 5}
+	} else if battery >= 5000 {
+		api.BizExtra = BizExtra{Msg: msg, Level: 4, BizID: 12}
+	} else if battery >= 1000 {
+		api.BizExtra = BizExtra{Msg: msg, Level: 3, BizID: 3}
+	} else if battery >= 500 {
+		api.BizExtra = BizExtra{Msg: msg, Level: 2, BizID: 14}
+	} else {
+		api.BizExtra = BizExtra{Msg: msg, Level: 1, BizID: 8}
+	}
+	return bilibili.Do[CreateOrderResponse](ctx, api)
+}
+
+type MyGoldWallet struct {
+	req.Get
+	http.CookieJar
+	NeedBp           int    `req:"query" default:"1"`
+	NeedMetal        int    `req:"query" default:"1"`
+	Platform         string `req:"query" default:"pc"`
+	BpWithDecimal    int    `req:"query" default:"0"`
+	IosBpAffordParty int    `req:"query" default:"0"`
+}
+
+func (MyGoldWallet) RawURL() string {
+	return "https://api.live.bilibili.com/xlive/revenue/v1/wallet/myGoldWallet"
+}
+
+type MyGoldWalletResponse struct {
+	bilibili.Error
+	Data struct {
+		Gold int `json:"gold"`
+	} `json:"data"`
+}
+
+// GetMyGoldWallet 获取我的钱包
+func GetMyGoldWallet(ctx context.Context, jar http.CookieJar) (MyGoldWalletResponse, error) {
+	return bilibili.Do[MyGoldWalletResponse](ctx, MyGoldWallet{CookieJar: jar})
 }
 
 func main() {
-	// 打开数据库，写入饮品
-	err := db.Open(cookies)
-	if err != nil {
-		logger.Panic(err)
-	}
-	if drinks != "" {
-		err = db.CreateDrinks(drinks)
-		if err != nil {
-			logger.Error(err)
-		}
-	}
-	// 初始化 Cookie
-	refresher := &bilibili.Refresher{}
-	jar := &CookieJar{CookieJar: &bilibili.Credential{}, UID: uid}
-	// 如果 UID 未给入则扫码获取
-	if uid == 0 {
-		generate, err := bilibili.GetGenerate()
-		if err != nil {
-			logger.Panic(err)
-		}
-		logger.Info(generate.Data.URL)
-		err = qrcode.WriteFile(generate.Data.URL, qrcode.Low, 200, "qrcode.jpg")
-		if err != nil {
-			logger.Panic(err)
-		}
-		ticker := time.NewTicker(5 * time.Second)
-		for range ticker.C {
-			// 先写入内部
-			result, err := bilibili.GetPoll(generate.Data.QRCodeKey, jar.CookieJar)
-			if err != nil {
-				logger.Error(err)
-				continue
-			}
-			// 再提取出 UID
-			cookies := jar.Cookies(bilibili.Session.BaseURL)
-			for _, cookie := range cookies {
-				if cookie.Name == "DedeUserID" {
-					jar.UID, err = strconv.Atoi(cookie.Value)
-					if err != nil {
-						logger.Panic(err)
-					}
-					break
-				}
-			}
-			// 再从外部重新设置一次，触发数据库写入
-			refresher.RefreshToken = result.Data.RefreshToken
-			jar.SetCookies(bilibili.Session.BaseURL, append(cookies, &http.Cookie{Name: "refresh_token", Value: refresher.RefreshToken}))
-			break
-		}
-		ticker.Stop()
-	} else {
-		cookies, err := db.GetUserCookies(uid)
-		if err != nil {
-			logger.Panic(err)
-		}
-		for _, cookie := range cookies {
-			if cookie.Name == "refresh_token" {
-				refresher.RefreshToken = cookie.Value
-				cookie.Name = ""
-				break
-			}
-		}
-		jar.CookieJar.SetCookies(bilibili.Session.BaseURL, cookies)
-	}
-
-	// 每天保活一次
-	cookie.Keepalive(jar, refresher, 24*time.Hour)
+	logger.Info("开始轮询")
 	// 随机轮询计时器
 	ticker := req.NewTicker(req.RandomTicker{4 * time.Minute, 6 * time.Minute})
 	defer ticker.Stop()
-	// 开始轮询
 	for {
 		for range ticker.C {
-			r, err := bilibili.GetRoomInfo(21452505)
+			r, err := bilibili.GetRoomInfo(context.Background(), 21452505)
 			if err != nil {
-				logger.Error(err)
+				bot.WithField("title", "获取直播失败").Error(err)
 				continue
 			}
 			if r.Data.LiveTime == "0000-00-00 00:00:00" {
 				logger.Debug("未开播")
 				continue
 			}
-			drink, err := db.GetRandomDrink()
+			var drink Drink
+			err = db.Order("RANDOM()").First(&drink).Error
 			if err != nil {
-				logger.Error(err)
+				bot.WithField("title", "读取饮料失败").Error(err)
 				continue
 			}
-			_, err = bilibili.PostSuperchat(21452505, 300, drink.Value, jar)
+			_, err = PostSuperchat(context.Background(), jar, 21452505, 300, drink.Value)
 			if err != nil {
-				logger.Error(err)
+				bot.WithField("title", "发送留言失败").Error(err)
 				continue
 			}
-			saki.Info(drink.Value)
-			err = db.DrinkUp(drink.Name)
+			wallet, err := GetMyGoldWallet(context.Background(), jar)
+			if err == nil {
+				drink.Value = fmt.Sprintf("%s\n（还可发送 %d 条）", drink.Value, wallet.Data.Gold/30000)
+			}
+			bot.WithField("title", "发送留言成功").Info(drink.Value)
+			err = db.Delete(&Drink{}, "name = ?", drink.Name).Error
 			if err != nil {
-				logger.Error(err)
+				bot.WithField("title", "移除饮料失败").Error(err)
 			}
 			break
 		}
-		time.Sleep(47 * time.Hour)
+		time.Sleep(time.Duration(options.Sleep) * time.Hour)
 	}
 }

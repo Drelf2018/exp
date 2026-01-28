@@ -3,16 +3,19 @@ module github.com/Drelf2018/exp/drink
 go 1.23
 
 require (
-	github.com/Drelf2018/exp/hook v0.0.0-20260113180942-0cc79ceadbbb
-	github.com/Drelf2018/req v0.0.0-20260106142955-ed8acd6b8e96
+	github.com/Drelf2018/dingtalk v0.0.0-20260119185921-eb58aad0f621
+	github.com/Drelf2018/exp/hook v0.0.0-20260124144020-ee0e790709c3
+	github.com/Drelf2018/go-bilibili-api v0.0.0-20260126130458-c368e8ab46ff
+	github.com/Drelf2018/go-bilibili-api/cookie v0.0.0-20260126130458-c368e8ab46ff
+	github.com/Drelf2018/req v0.0.0-20260119155603-2094703bdf97
 	github.com/glebarez/sqlite v1.11.0
+	github.com/jessevdk/go-flags v1.6.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	gorm.io/gorm v1.31.1
 )
 
 require (
-	github.com/Drelf2018/dingtalk v0.0.0-20260108180801-122e61c5f895 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.21.2 // indirect
@@ -21,7 +24,8 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	github.com/writeas/go-strip-markdown v2.0.1+incompatible // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.22.5 // indirect
