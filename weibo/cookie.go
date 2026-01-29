@@ -8,6 +8,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -105,21 +106,21 @@ func RefreshWeiboCookie(ctx context.Context, jar http.CookieJar) error {
 				bot.WithField("title", "微博截屏失败").Error(err)
 				return nil
 			}
-			filename := fmt.Sprintf("weibo_%s.jpg", time.Now().Format("2006_01_02_15_04_05"))
+			objectName := time.Now().Format("weibo/2006_01_02_15_04_05.jpg")
 			err = qiniu.UploadReader(ctx, bytes.NewReader(img), &uploader.ObjectOptions{
 				BucketName: bucket.Name(),
-				ObjectName: &filename,
-				FileName:   filename,
+				ObjectName: &objectName,
+				FileName:   filepath.Base(objectName),
 			}, nil)
 			if err != nil {
 				bot.WithField("title", "截屏上传失败").Error(err)
 				return nil
 			}
 			bot.WithFields(logrus.Fields{
-				"banner": fmt.Sprintf("![](https://yun.nana7mi.link/%s)", filename),
+				"banner": fmt.Sprintf("![](https://yun.nana7mi.link/%s)", objectName),
 				"title":  "微博刷新成功",
 			}).Info()
-			err = bucket.Object(filename).SetLifeCycle().DeleteAfterDays(3).Call(context.Background())
+			err = bucket.Object(objectName).SetLifeCycle().DeleteAfterDays(3).Call(ctx)
 			if err != nil {
 				bot.WithField("title", "设置过期失败").Error(err)
 			}
