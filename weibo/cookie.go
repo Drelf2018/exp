@@ -8,12 +8,10 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/playwright-community/playwright-go"
-	"github.com/qiniu/go-sdk/v7/storagev2/uploader"
 	"github.com/sirupsen/logrus"
 )
 
@@ -107,11 +105,7 @@ func RefreshWeiboCookie(ctx context.Context, jar http.CookieJar) error {
 				return nil
 			}
 			objectName := time.Now().Format("weibo/2006_01_02_15_04_05.jpg")
-			err = qiniu.UploadReader(ctx, bytes.NewReader(img), &uploader.ObjectOptions{
-				BucketName: bucket.Name(),
-				ObjectName: &objectName,
-				FileName:   filepath.Base(objectName),
-			}, nil)
+			err = options.Qiniu.Upload(ctx, bytes.NewReader(img), objectName)
 			if err != nil {
 				bot.WithField("title", "截屏上传失败").Error(err)
 				return nil
@@ -120,10 +114,6 @@ func RefreshWeiboCookie(ctx context.Context, jar http.CookieJar) error {
 				"banner": fmt.Sprintf("![](https://yun.nana7mi.link/%s)", objectName),
 				"title":  "微博刷新成功",
 			}).Info()
-			err = bucket.Object(objectName).SetLifeCycle().DeleteAfterDays(3).Call(ctx)
-			if err != nil {
-				bot.WithField("title", "设置过期失败").Error(err)
-			}
 			return nil
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/Drelf2018/dingtalk"
 	"github.com/Drelf2018/exp/hook"
 	"github.com/Drelf2018/exp/model"
+	"github.com/Drelf2018/exp/qiniu"
 	"github.com/Drelf2018/req"
 	"github.com/Drelf2018/req/cookie"
 	"github.com/glebarez/sqlite"
@@ -23,26 +24,17 @@ import (
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
-	"github.com/qiniu/go-sdk/v7/storagev2/credentials"
-	"github.com/qiniu/go-sdk/v7/storagev2/http_client"
-	"github.com/qiniu/go-sdk/v7/storagev2/objects"
-	"github.com/qiniu/go-sdk/v7/storagev2/uploader"
 	sloglogrus "github.com/samber/slog-logrus/v2"
 )
 
-type Qiniu struct {
-	AccessKey string `long:"accessKey" description:"七牛云 AccessKey"`
-	SecretKey string `long:"secretKey" description:"七牛云 SecretKey"`
-}
-
 type Options struct {
-	Me       int           `short:"m" long:"me" description:"你的微博 UID"`
-	Target   int           `short:"t" long:"target" description:"监控目标 UID"`
-	Logger   string        `short:"l" long:"logger" description:"日志文件路径"`
-	Crontab  string        `short:"c" long:"crontab" description:"刷新 Cookie 任务"`
-	Database string        `short:"d" long:"database" description:"数据库文件路径"`
-	DingTalk *dingtalk.Bot `group:"DingTalk" description:"钉钉机器人"`
-	Qiniu    Qiniu         `group:"Qiniu" description:"七牛云凭证"`
+	Me       int                      `short:"m" long:"me" description:"你的微博 UID"`
+	Target   int                      `short:"t" long:"target" description:"监控目标 UID"`
+	Logger   string                   `short:"l" long:"logger" description:"日志文件路径"`
+	Crontab  string                   `short:"c" long:"crontab" description:"刷新 Cookie 任务"`
+	Database string                   `short:"d" long:"database" description:"数据库文件路径"`
+	DingTalk *dingtalk.Bot            `group:"DingTalk" description:"钉钉机器人"`
+	Qiniu    *qiniu.TemporaryUploader `group:"Qiniu" description:"七牛云凭证"`
 }
 
 var (
@@ -52,8 +44,6 @@ var (
 	jar     *CookieJar
 	db      *gorm.DB
 	tmpl    *template.Template
-	qiniu   *uploader.UploadManager
-	bucket  *objects.Bucket
 )
 
 // 获取运行参数
@@ -75,20 +65,6 @@ func init() {
 	ding := hook.NewDingTalkHook(options.DingTalk)
 	logger = hook.New(logrus.InfoLevel, hook.NewDailyFileHook(options.Logger), ding)
 	bot = ding.Bind(logger)
-}
-
-// 初始化七牛云
-func init() {
-	mac := credentials.NewCredentials(options.Qiniu.AccessKey, options.Qiniu.SecretKey)
-	qiniu = uploader.NewUploadManager(&uploader.UploadManagerOptions{
-		Options: http_client.Options{
-			Credentials: mac,
-		},
-	})
-	objectsManager := objects.NewObjectsManager(&objects.ObjectsManagerOptions{
-		Options: http_client.Options{Credentials: mac},
-	})
-	bucket = objectsManager.Bucket("apex12138")
 }
 
 // 初始化浏览器
