@@ -55,9 +55,6 @@ func EncodeJPEGImage(options *jpeg.Options) UploadHandler {
 				return nil, fmt.Errorf("qiniu: invalid image format: %s: %w", format, err)
 			}
 			buf := new(bytes.Buffer)
-			if options == nil {
-				options = &jpeg.Options{Quality: 80}
-			}
 			err = jpeg.Encode(buf, img, options)
 			if err != nil {
 				return nil, fmt.Errorf("qiniu: failed to encode image: %w", err)
@@ -68,7 +65,8 @@ func EncodeJPEGImage(options *jpeg.Options) UploadHandler {
 	}
 }
 
-var _ UploadHandler = EncodeJPEGImage(nil)
+// JPEG 将图片统一编码为质量 75 的 JPEG 格式
+var JPEG UploadHandler = EncodeJPEGImage(nil)
 
 // TemporaryUploader 七牛云临时上传器
 type TemporaryUploader struct {
