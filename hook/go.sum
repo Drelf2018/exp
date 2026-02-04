@@ -1,7 +1,5 @@
 github.com/Drelf2018/dingtalk v0.0.0-20260202025804-7a9247527236 h1:+B7unlQBbU9ST4aH+cx34cGCUbopWNNnuoxbXsnmUJU=
 github.com/Drelf2018/dingtalk v0.0.0-20260202025804-7a9247527236/go.mod h1:lYnjmJyewEcY0eWU/gdL3VvDffRyMYQD1Wot2mA5QHc=
-github.com/Drelf2018/exp/filler v0.0.0-20260129131937-a0f34b27691a h1:8DN41sSj7CwsnjjkanOOpiQi3xxKXsg29xPmsfId4Gw=
-github.com/Drelf2018/exp/filler v0.0.0-20260129131937-a0f34b27691a/go.mod h1:xSRkLuXxy6YlIlWyWXZWUff74mYS8piDqtlvPs5LOBw=
 github.com/Drelf2018/req v0.0.0-20260202023602-73315c9061f0 h1:W9TafS59S8sBCUF+8y0rWMgHiblIzUE42lYCeja1T0w=
 github.com/Drelf2018/req v0.0.0-20260202023602-73315c9061f0/go.mod h1:SgQkhv/iD3+Sqvg9KCqiElH7jaXMl4OWGBKHd6MJoCE=
 github.com/antonfisher/nested-logrus-formatter v1.3.1 h1:NFJIr+pzwv5QLHTPyKz9UMEoHck02Q9L0FP13b/xSbQ=
