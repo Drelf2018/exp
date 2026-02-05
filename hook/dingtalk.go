@@ -3,10 +3,13 @@ package hook
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Drelf2018/dingtalk"
+	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/sirupsen/logrus"
 	stripmd "github.com/writeas/go-strip-markdown"
 )
@@ -185,14 +188,32 @@ func (d *DingTalkHook) Bind(logger *logrus.Logger) *logrus.Entry {
 }
 
 // WithError 用于打印错误
-func (d *DingTalkHook) WithError(logger *logrus.Logger) func(title string, err error, fields ...logrus.Fields) {
+func (d *DingTalkHook) WithError(logger *logrus.Logger, fs ...logrus.Fields) func(title string, err error, fields ...logrus.Fields) {
 	return func(title string, err error, fields ...logrus.Fields) {
 		entry := logger.WithFields(logrus.Fields{DingTalkKey: d.Bot.Name, logrus.ErrorKey: err})
-		for _, field := range fields {
+		for _, field := range append(fs, fields...) {
 			entry = entry.WithFields(field)
 		}
 		entry.Error(title)
 	}
+}
+
+// Error 创建空白日志用于打印错误
+func (d *DingTalkHook) Error(out io.Writer, fields ...logrus.Fields) func(title string, err error, fields ...logrus.Fields) {
+	logger := &logrus.Logger{
+		Out:   out,
+		Hooks: make(logrus.LevelHooks),
+		Formatter: &nested.Formatter{
+			TimestampFormat:       "2006-01-02 15:04:05",
+			NoColors:              true,
+			ShowFullLevel:         true,
+			CustomCallerFormatter: func(*runtime.Frame) string { return "" },
+		},
+		ReportCaller: true,
+		Level:        logrus.TraceLevel,
+	}
+	logger.AddHook(d)
+	return d.WithError(logger, fields...)
 }
 
 // NewDingTalkHook 创建钉钉机器人钩子，日志等级为空时视为全部等级
