@@ -58,8 +58,12 @@ type CardLayout struct {
 	Footer  string // 页脚
 }
 
+func (d CardLayout) String() string {
+	return d.Banner + d.Header + d.Content + d.Footer
+}
+
 func (d CardLayout) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.Banner + d.Header + d.Content + d.Footer)
+	return json.Marshal(d.String())
 }
 
 var _ json.Marshaler = CardLayout{}
@@ -170,7 +174,11 @@ func (d *DingTalkHook) Fire(entry *logrus.Entry) error {
 				return err
 			}
 		} else {
-			msg = NewLoggerCard(entry)
+			card := NewLoggerCard(entry)
+			if !d.Bot.ContainsAnyKeyword(card.Title.String()) && !d.Bot.ContainsAnyKeyword(card.Text.String()) {
+				card.Title.Footer += d.Bot.Keywords[0]
+			}
+			msg = card
 		}
 		if entry.Data[SyncKey] == true {
 			return d.Bot.Send(msg)
