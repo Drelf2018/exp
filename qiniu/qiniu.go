@@ -23,7 +23,7 @@ import (
 // UploadHandler 上传前处理器
 type UploadHandler func(ctx context.Context, r io.Reader, path string) (io.Reader, error)
 
-// EncodeJPEGImage 将图片统一编码为 JPEG 格式，可传入空值
+// EncodeJPEGImage 将图片统一编码为 JPEG 格式图片，可传入空值
 func EncodeJPEGImage(options *jpeg.Options) UploadHandler {
 	return func(ctx context.Context, r io.Reader, path string) (io.Reader, error) {
 		var mime string
@@ -65,15 +65,15 @@ func EncodeJPEGImage(options *jpeg.Options) UploadHandler {
 	}
 }
 
-// JPEG 将图片统一编码为质量 75 的 JPEG 格式
+// JPEG 将图片统一编码为质量 75 的 JPEG 格式图片
 var JPEG UploadHandler = EncodeJPEGImage(nil)
 
 // TemporaryUploader 七牛云临时上传器
 type TemporaryUploader struct {
-	AccessKey       string `json:"access_key" yaml:"access_key" toml:"access_key" long:"access_key" description:"七牛云 AccessKey"`
-	SecretKey       string `json:"secret_key" yaml:"secret_key" toml:"secret_key" long:"secret_key" description:"七牛云 SecretKey"`
-	BucketName      string `json:"bucket_name" yaml:"bucket_name" toml:"bucket_name" long:"bucket_name" description:"七牛云空间名称"`
-	DeleteAfterDays int64  `json:"delete_after_days" yaml:"delete_after_days" toml:"delete_after_days" long:"delete_after_days" description:"七牛云临时上传有效天数"`
+	AccessKey       string `json:"access" yaml:"access" toml:"access" long:"access" description:"七牛云 AccessKey"`
+	SecretKey       string `json:"secret" yaml:"secret" toml:"secret" long:"secret" description:"七牛云 SecretKey"`
+	BucketName      string `json:"bucket" yaml:"bucket" toml:"bucket" long:"bucket" description:"七牛云空间名称"`
+	DeleteAfterDays int64  `json:"delete" yaml:"delete" toml:"delete" long:"delete" description:"七牛云临时上传有效天数"`
 }
 
 // Upload 临时上传 io.Reader
