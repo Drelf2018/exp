@@ -123,7 +123,7 @@ func main() {
 					logger.Errorln("获取图片失败:", err)
 				}
 				SendDingTalk("上新", p, image)
-				// SendFangTang("上新", p, image)
+				SendFangTang("上新", p, image)
 			}
 		},
 		OnUpdate: func(products []*Product) {
