@@ -15,9 +15,9 @@ import (
 )
 
 type Options struct {
-	CSV      string                   `short:"c" long:"csv" description:"csv 文件路径"`
-	Logger   string                   `short:"l" long:"logger" description:"日志文件路径"`
-	FangTang fangtang.FangTang        `short:"f" long:"fangtang" description:"方糖密钥"`
+	CSV      string                   `long:"csv" description:"csv 文件路径"`
+	Logger   string                   `long:"logger" description:"日志文件路径"`
+	FangTang fangtang.FangTang        `long:"fangtang" description:"方糖密钥"`
 	DingTalk *dingtalk.Bot            `group:"DingTalk" description:"钉钉机器人"`
 	Qiniu    *qiniu.TemporaryUploader `group:"Qiniu" description:"七牛云凭证"`
 }
@@ -76,7 +76,7 @@ func AppendCSV(cmd string, product *Product) {
 		time.Now().Format("2006-01-02 15:04:05"),
 		cmd, product.Name, product.Price, product.VariantString(" ", ","))
 	if err != nil {
-		bot.WithField("title", "写入文件失败").Error(err)
+		bot.WithError(err).Error("写入文件失败")
 	}
 }
 
@@ -91,7 +91,7 @@ func SendDingTalk(cmd string, product *Product, image string) {
 		filepath := fmt.Sprintf("acrnm%s_%s.jpg", product.Href, time.Now().Format("2006_01_02_15_04_05"))
 		err := options.Qiniu.UploadURL(context.Background(), image, filepath, qiniu.JPEG)
 		if err != nil {
-			bot.WithField("title", "上传图片失败").Error(err)
+			bot.WithError(err).Error("上传图片失败")
 		} else {
 			fields["banner"] = "https://yun.nana7mi.link/" + filepath
 		}
@@ -102,13 +102,13 @@ func SendDingTalk(cmd string, product *Product, image string) {
 // SendFangTang 方糖推送商品
 func SendFangTang(cmd string, product *Product, image string) {
 	title := cmd + " " + product.Name + " " + product.Price
-	desp := product.VariantString(" ", "\n") + "\n\n" + hook.TimeFormat(time.Now())
+	desp := product.VariantString(" ", "\n") + "\n\n" + time.Now().Format("2006-01-02 15:04:05")
 	if image != "" {
 		desp += fmt.Sprintf("\n\n![%s](%s)", product.Href, image)
 	}
 	_, err := options.FangTang.Send(title, desp, fangtang.WeChat)
 	if err != nil {
-		bot.WithField("title", "方糖推送失败").Error(err)
+		bot.WithError(err).Error("方糖推送失败")
 	}
 }
 
@@ -143,7 +143,7 @@ func main() {
 			}
 		},
 		OnError: func(err error) {
-			bot.WithField("title", "请求发生错误").Error(err)
+			bot.WithError(err).Error("请求发生错误")
 		},
 	}
 	err := acrnm.Run()

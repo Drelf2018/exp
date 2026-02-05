@@ -3,9 +3,9 @@ module github.com/Drelf2018/exp/acrnm
 go 1.24.0
 
 require (
-	github.com/Drelf2018/dingtalk v0.0.0-20260202025804-7a9247527236
+	github.com/Drelf2018/dingtalk v0.0.0-20260205064823-c2a5e854efb7
 	github.com/Drelf2018/exp/fangtang v0.0.0-20260202095807-41b2d89a2b16
-	github.com/Drelf2018/exp/hook v0.0.0-20260203071705-0e483462e05c
+	github.com/Drelf2018/exp/hook v0.0.0-20260205081648-4af855549f4a
 	github.com/Drelf2018/exp/qiniu v0.0.0-20260203071705-0e483462e05c
 	github.com/Drelf2018/req v0.0.0-20260202023602-73315c9061f0
 	github.com/Drelf2018/xpath v0.0.0-20250128180641-265e037a18f0
@@ -19,7 +19,6 @@ require (
 require (
 	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1 // indirect
-	github.com/Drelf2018/exp/filler v0.0.0-20260129131937-a0f34b27691a // indirect
 	github.com/RomainMichau/CycleTLS/cycletls v1.0.30-compatible // indirect
 	github.com/alex-ant/gomath v0.0.0-20160516115720-89013a210a82 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
@@ -35,7 +34,7 @@ require (
 	github.com/qiniu/go-sdk/v7 v7.25.6 // indirect
 	github.com/refraction-networking/utls v1.8.0 // indirect
 	github.com/writeas/go-strip-markdown v2.0.1+incompatible // indirect
-	golang.org/x/crypto v0.47.0 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/image v0.24.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
