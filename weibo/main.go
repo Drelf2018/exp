@@ -16,7 +16,6 @@ import (
 	"github.com/Drelf2018/exp/qiniu"
 	"github.com/Drelf2018/req"
 	"github.com/Drelf2018/req/cookie"
-	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"github.com/jessevdk/go-flags"
 	"github.com/playwright-community/playwright-go"
@@ -28,11 +27,11 @@ import (
 )
 
 type Options struct {
-	Me       int                      `short:"m" long:"me" description:"你的微博 UID"`
-	Target   int                      `short:"t" long:"target" description:"监控目标 UID"`
-	Logger   string                   `short:"l" long:"logger" description:"日志文件路径"`
-	Crontab  string                   `short:"c" long:"crontab" description:"刷新 Cookie 任务"`
-	Database string                   `short:"d" long:"database" description:"数据库文件路径"`
+	Me       int                      `long:"me" description:"你的微博 UID"`
+	Target   int                      `long:"target" description:"监控目标 UID"`
+	Logger   string                   `long:"logger" description:"日志文件路径"`
+	Crontab  string                   `long:"crontab" description:"刷新 Cookie 任务"`
+	Database model.Database           `long:"database" description:"数据库文件路径"`
 	DingTalk *dingtalk.Bot            `group:"DingTalk" description:"钉钉机器人"`
 	Qiniu    *qiniu.TemporaryUploader `group:"Qiniu" description:"七牛云凭证"`
 }
@@ -108,7 +107,7 @@ func init() {
 	_, err = c.AddJob(options.Crontab, &cookie.KeepaliveCookieJar{
 		CookieJar: jar,
 		Refresher: cookie.ForcedRefresher(RefreshWeiboCookie),
-		OnError:   func(err error) { bot.WithField("title", "微博保活失败").Error(err) },
+		OnError:   func(err error) { bot.WithError(err).Error("微博保活失败") },
 	})
 	if err != nil {
 		logger.Panicln("添加任务失败:", err)
@@ -120,29 +119,25 @@ func init() {
 func init() {
 	var err error
 	logger.Info("初始化数据库")
-	db, err = gorm.Open(sqlite.Open(options.Database))
+	db, err = options.Database.Open(&model.Blog{})
 	if err != nil {
-		logger.Panicln("创建数据库失败:", err)
-	}
-	err = db.AutoMigrate(&model.Blog{})
-	if err != nil {
-		logger.Panicln("自动迁移数据库失败:", err)
+		logger.Panicln("初始化数据库失败:", err)
 	}
 }
 
 // 初始化博文模板
 func init() {
 	var err error
-	funcMap := template.FuncMap{"suffix": strings.HasSuffix, "prefix": hook.Prefix, "timef": hook.TimeFormat}
-	tmpl, err = template.New("").Funcs(funcMap).Parse("{{if .Banner}}![]({{.Banner}})\n\n{{end}}{{template \"blog\" .}}\n\n###### {{timef .Time}}")
+	funcMap := template.FuncMap{"suffix": strings.HasSuffix, "prefix": hook.Prefix}
+	tmpl, err = template.New("").Funcs(funcMap).Parse("{{if .Banner}}![]({{.Banner}})\n\n{{end}}{{template \"blog\" .}}\n\n###### {{.Time.Format \"2006-01-02 15:04:05\"}}")
 	if err != nil {
 		logger.Panicln("创建博文模板失败:", err)
 	}
 	_, err = tmpl.New("blog").Parse(`### {{.Name}}{{if (and .Title (ne .Type "like"))}} {{.Title}}{{end}}
 
-{{prefix .Plaintext "#### "}}{{range $idx, $asset := .Assets}}{{if or (suffix $asset ".jpg") (suffix $asset ".jpeg") (suffix $asset ".png")}}
+{{prefix .Plaintext "#### "}}{{range .Assets}}{{if or (suffix . ".jpg") (suffix . ".jpeg") (suffix . ".png")}}
 
-![]({{$asset}}){{end}}{{end}}{{if .Reply}}
+![]({{.}}){{end}}{{end}}{{if .Reply}}
 
 {{template "blog" .Reply}}{{end}}`)
 	if err != nil {
@@ -157,7 +152,7 @@ func sendLink(ctx context.Context, blog *model.Blog) {
 		if urlErr, ok := err.(*url.Error); ok {
 			err = urlErr.Unwrap()
 		}
-		bot.WithField("title", "发送链接失败").Error(err)
+		bot.WithError(err).Error("发送链接失败")
 	}
 }
 
@@ -180,12 +175,10 @@ func send(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
 	err := tmpl.Execute(&b, blog)
 	if err != nil {
 		// 执行模板失败，退避为发送链接
-		bot.WithField("title", "执行模板失败").Error(err)
+		bot.WithError(err).Error("执行模板失败")
 		sendLink(ctx, blog)
 		return
 	}
-	// 构造卡片
-	msg := &dingtalk.ActionCard{Title: " " + blog.String(), Text: b.String(), SingleTitle: "阅读全文", SingleURL: blog.URL}
 	// 重试三次，如果一直系统繁忙则切换发送方式
 	msgUUID := dingtalk.UUID(uuid.NewString())
 	for i := range 3 {
@@ -193,7 +186,7 @@ func send(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
 			time.Sleep((1 << i) * time.Second)
 		}
 		// 发送成功，直接返回
-		err = options.DingTalk.Send(msg, msgUUID)
+		err = options.DingTalk.SendActionCard(" "+blog.String(), b.String(), "阅读全文", blog.URL, msgUUID)
 		if err == nil {
 			return
 		}
@@ -208,27 +201,25 @@ func send(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
 		break
 	}
 	// 发送卡片失败，退避为发送链接
-	bot.WithField("title", "发送微博失败").Error(err)
+	bot.WithError(err).Error("发送微博失败")
 	sendLink(ctx, blog)
 }
 
 // 轮询获取微博
 func main() {
 	logger.Info("轮询获取微博")
-	var now time.Time
-	last := time.Now()
+	var last time.Time
+	now := time.Now()
 	bgCtx := context.Background()
-	fetchTicker := req.NewTicker(req.RandomTicker{7 * time.Second, 10 * time.Second})
-	defer fetchTicker.Stop()
-	for now = range fetchTicker.C {
+	for range req.WithDelay(req.RandomDelayer{7 * time.Second, 10 * time.Second}) {
+		last, now = now, time.Now()
 		logger.Debugf("获取微博 (+%s)", now.Sub(last))
-		last = now
 		for mblog := range GetMymlogIter(bgCtx, options.Target, jar) {
 			blog := mblog.ToBlog()
 			// 当前博文未保存则写入数据库，会比较编辑次数是否有差异，如果有差异会重新写入
 			result := db.Scopes(blog.Match).Limit(1).Find(&model.Blog{})
 			if result.Error != nil {
-				bot.WithField("title", "微博查询失败").Error(result.Error)
+				bot.WithError(result.Error).Error("微博查询失败")
 				continue
 			}
 			// 已经保存过则跳过
@@ -244,7 +235,7 @@ func main() {
 			// 写入数据库
 			err := db.Create(blog).Error
 			if err != nil {
-				bot.WithField("title", "微博保存失败").Error(err)
+				bot.WithError(err).Error("微博保存失败")
 			}
 		}
 	}

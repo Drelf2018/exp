@@ -3,12 +3,11 @@ module github.com/Drelf2018/exp/weibo
 go 1.23
 
 require (
-	github.com/Drelf2018/dingtalk v0.0.0-20260119185921-eb58aad0f621
-	github.com/Drelf2018/exp/hook v0.0.0-20260124144020-ee0e790709c3
-	github.com/Drelf2018/exp/model v0.0.0-20260117091714-86e1c26640c1
+	github.com/Drelf2018/dingtalk v0.0.0-20260205064823-c2a5e854efb7
+	github.com/Drelf2018/exp/hook v0.0.0-20260205085049-378ca6d3c027
+	github.com/Drelf2018/exp/model v0.0.0-20260206071427-2efeb8d55b35
 	github.com/Drelf2018/exp/qiniu v0.0.0-20260203073510-5ae14d6ab225
-	github.com/Drelf2018/req v0.0.0-20260119155603-2094703bdf97
-	github.com/glebarez/sqlite v1.11.0
+	github.com/Drelf2018/req v0.0.0-20260202023602-73315c9061f0
 	github.com/google/uuid v1.6.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/playwright-community/playwright-go v0.5200.1
@@ -30,6 +29,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.1 // indirect
 	github.com/gammazero/toposort v0.1.1 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
+	github.com/glebarez/sqlite v1.11.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect

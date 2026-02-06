@@ -101,13 +101,13 @@ func RefreshWeiboCookie(ctx context.Context, jar http.CookieJar) error {
 			}
 			img, err := page.Screenshot()
 			if err != nil {
-				bot.WithField("title", "微博截屏失败").Error(err)
+				bot.WithError(err).Error("微博截屏失败")
 				return nil
 			}
 			objectName := time.Now().Format("weibo/2006_01_02_15_04_05.jpg")
 			err = options.Qiniu.Upload(ctx, bytes.NewReader(img), objectName)
 			if err != nil {
-				bot.WithField("title", "截屏上传失败").Error(err)
+				bot.WithError(err).Error("截屏上传失败")
 				return nil
 			}
 			bot.WithFields(logrus.Fields{
@@ -135,7 +135,7 @@ func (c *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	}
 	err := os.WriteFile(strconv.Itoa(c.UID)+".cookie", []byte(req.Header.Get("Cookie")), os.ModePerm)
 	if err != nil {
-		bot.WithField("title", "保存 Cookie 失败").Error(err)
+		bot.WithError(err).Error("保存 Cookie 失败")
 	}
 }
 
