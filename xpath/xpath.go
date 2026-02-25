@@ -14,7 +14,9 @@ import (
 // UnmarshalValue 将节点反序列化进 reflect.Value
 func UnmarshalValue(nodes []*html.Node, value reflect.Value) error {
 	if len(nodes) == 0 {
-		value.Set(reflect.Zero(value.Type()))
+		if !value.IsZero() && value.CanSet() {
+			value.Set(reflect.Zero(value.Type()))
+		}
 		return nil
 	}
 	switch kind := value.Kind(); kind {
@@ -75,7 +77,7 @@ func UnmarshalValue(nodes []*html.Node, value reflect.Value) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("xpath: invalid value type %v", value)
+		return fmt.Errorf("xpath: invalid value type: %v", value)
 	}
 }
 
