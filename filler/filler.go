@@ -42,7 +42,7 @@ func Parse(tmpl *template.Template, v any) error {
 		elem = elem.Elem()
 	}
 	if elem.Kind() != reflect.Struct {
-		return fmt.Errorf("filler: invalid value: expected (a pointer to) a struct, got: %T(%v)", v, elem.Kind())
+		return fmt.Errorf("filler: invalid value: expected (a pointer to) a struct, got: %v(%v)", elem.Type(), elem.Kind())
 	}
 	return parse(tmpl, elem.Type().Name(), elem)
 }
@@ -51,6 +51,16 @@ func Parse(tmpl *template.Template, v any) error {
 func New(v any) (*template.Template, error) {
 	tmpl := template.New("")
 	return tmpl, Parse(tmpl, v)
+}
+
+// Must 必须将结构体对象解析在新模板中
+func Must(v any) *template.Template {
+	tmpl := template.New("")
+	err := Parse(tmpl, v)
+	if err != nil {
+		panic(err)
+	}
+	return tmpl
 }
 
 // fill 填充结构体对象字段值
@@ -93,7 +103,7 @@ func fill(tmpl *template.Template, prefix string, data any, elem reflect.Value) 
 func Fill(tmpl *template.Template, data any, v any) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Pointer || val.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("filler: invalid value: expected a pointer to a struct, got: %T(%v)", v, val.Kind())
+		return fmt.Errorf("filler: invalid value: expected a pointer to a struct, got: %v(%v)", val.Type(), val.Kind())
 	}
 	return fill(tmpl, val.Elem().Type().Name(), data, val.Elem())
 }
