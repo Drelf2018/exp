@@ -3,28 +3,22 @@ package main
 import (
 	"strings"
 
-	"github.com/Drelf2018/req"
+	"github.com/Drelf2018/exp/xpath"
+	"github.com/RomainMichau/cloudscraper_go/cloudscraper"
 )
 
-type AcrnmAPI struct {
-	req.Get
-}
-
-func (AcrnmAPI) RawURL() string {
-	return "http://acrnm.nana7mi.link"
-}
-
+// 商品款式
 type Variant struct {
-	Color string
-	Size  string
+	Color string `xpath:"./div/span/text()"`
+	Size  string `xpath:"./span/text()"`
 }
 
 // 商品
 type Product struct {
-	Name     string
-	Href     string
-	Price    string
-	Variants []Variant
+	Name     string    `xpath:"./td[1]/a/span/text()"`
+	Href     string    `xpath:"./td[1]/a/@href"`
+	Price    string    `xpath:"./td[4]/span/text()"`
+	Variants []Variant `xpath:"./td[3]/div/span"`
 }
 
 func (p *Product) Equal(n *Product) bool {
@@ -81,6 +75,23 @@ func (p Product) URL() string {
 }
 
 var scraper, _ = cloudscraper.Init(false, false)
+
+// 商品列表
+type Products []*Product
+
+func (Products) XPath() string {
+	return `//*[@id="main"]/div/table/tbody/tr[./td[4]/span/text() != ""]`
+}
+
+func GetProducts() ([]*Product, error) {
+	resp, err := scraper.Get("https://acrnm.com?sort=default&filter=txt", make(map[string]string), "")
+	if err != nil {
+		return nil, err
+	}
+	var products Products
+	err = xpath.UnmarshalText(resp.Body, &products)
+	return products, err
+}
 
 type ProductImage string
 

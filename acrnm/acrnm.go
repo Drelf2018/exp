@@ -2,22 +2,13 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Drelf2018/req"
-	"github.com/Drelf2018/xpath"
-	"github.com/RomainMichau/cloudscraper_go/cloudscraper"
 	mapset "github.com/deckarep/golang-set/v2"
-	"golang.org/x/net/html"
 )
 
 type Acrnm struct {
-	// 商品信息来源接口 可使用库内的默认实现
-	//
-	// 	acrnm.AcrnmAPI{}
-	Source req.API
-
 	// 每次轮询间隔时间的计时器
 	Delayer req.Delayer
 
@@ -35,9 +26,6 @@ type Acrnm struct {
 }
 
 func (a Acrnm) Run() error {
-	if a.Source == nil {
-		a.Source = AcrnmAPI{}
-	}
 	if a.Delayer == nil {
 		a.Delayer = req.ForeverDelayer(10 * time.Second)
 	}
@@ -57,7 +45,7 @@ func (a Acrnm) Run() error {
 	alive := mapset.NewSet[string]()
 
 	// 首次请求 初始化商品字典
-	result, err := req.Result[[]*Product](a.Source)
+	result, err := GetProducts()
 	if err != nil {
 		return fmt.Errorf("acrnm: initial error: %v", err)
 	}
@@ -65,10 +53,11 @@ func (a Acrnm) Run() error {
 		alive.Add(product.Href)
 		products[product.Href] = product
 	}
+	logger.Infoln("预加载", len(products), "件商品")
 
 	// 开始轮询
 	for range req.WithDelay(a.Delayer) {
-		result, err = req.Result[[]*Product](a.Source)
+		result, err = GetProducts()
 		if err != nil {
 			if a.OnError != nil {
 				a.OnError(err)
