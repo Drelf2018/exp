@@ -176,8 +176,8 @@ func Run(ctx context.Context, options config.Options) error {
 			entry.WithError(err).Error("截屏上传失败")
 		} else {
 			entry.WithFields(logrus.Fields{
-				"banner": fmt.Sprintf("![](https://yun.nana7mi.link/%s)", objectName),
-				"title":  "微博刷新成功",
+				hook.BannerKey: "https://yun.nana7mi.link/" + objectName,
+				hook.TitleKey:  "微博刷新成功",
 			}).Info()
 		}
 	})
