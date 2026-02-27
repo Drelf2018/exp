@@ -1,4 +1,4 @@
-package main
+package run
 
 import (
 	"context"
@@ -209,19 +209,4 @@ var _ req.Unwrap = (*MymlogResponse)(nil)
 func GetMymlog(ctx context.Context, uid int, jar http.CookieJar) (r MymlogResponse, err error) {
 	err = session.ResultWithContext(ctx, Mymlog{CookieJar: jar, UID: uid}, &r)
 	return
-}
-
-func GetMymlogIter(ctx context.Context, uid int, jar http.CookieJar) func(yield func(Mblog) bool) {
-	return func(yield func(Mblog) bool) {
-		r, err := GetMymlog(ctx, uid, jar)
-		if err != nil {
-			bot.WithError(err).Error("迭代微博出错")
-			return
-		}
-		for _, mblog := range r.Data.List {
-			if ctx.Err() != nil || !yield(mblog) {
-				return
-			}
-		}
-	}
 }
