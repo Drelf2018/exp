@@ -141,28 +141,3 @@ func (a Acrnm) Run() error {
 
 	return nil
 }
-
-var scraper, _ = cloudscraper.Init(false, false)
-
-type ProductImage string
-
-func (ProductImage) XPath() string {
-	return "/html/body/div[1]/main/div/div[2]/div/img/@src"
-}
-
-func GetProductImage(href string) (string, error) {
-	resp, err := scraper.Get("https://acrnm.com"+href, make(map[string]string), "")
-	if err != nil {
-		return "", err
-	}
-	node, err := html.Parse(strings.NewReader(resp.Body))
-	if err != nil {
-		return "", err
-	}
-	var image ProductImage
-	err = xpath.UnmarshalNode(node, &image)
-	if err != nil {
-		return "", err
-	}
-	return string(image), nil
-}

@@ -84,7 +84,7 @@ func AppendCSV(cmd string, product *Product) {
 func SendDingTalk(cmd string, product *Product, image string) {
 	fields := logrus.Fields{
 		"header": cmd + " " + product.Name + " " + product.Price,
-		"url":    "https://acrnm.com" + product.Href,
+		"url":    product.URL(),
 		"button": "查看详情",
 	}
 	if image != "" {
@@ -118,7 +118,7 @@ func main() {
 		OnNew: func(products []*Product) {
 			for _, p := range products {
 				AppendCSV("上新", p)
-				image, err := GetProductImage(p.Href)
+				image, err := GetProductImage(p.URL())
 				if err != nil {
 					logger.Errorln("获取图片失败:", err)
 				}
@@ -129,7 +129,7 @@ func main() {
 		OnUpdate: func(products []*Product) {
 			for _, p := range products {
 				AppendCSV("变更", p)
-				image, err := GetProductImage(p.Href)
+				image, err := GetProductImage(p.URL())
 				if err != nil {
 					logger.Errorln("获取图片失败:", err)
 				}

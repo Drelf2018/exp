@@ -75,3 +75,28 @@ func (p *Product) VariantString(hyphen, sep string) string {
 	}
 	return strings.Join(variants, sep)
 }
+
+func (p Product) URL() string {
+	return "https://acrnm.com" + p.Href
+}
+
+var scraper, _ = cloudscraper.Init(false, false)
+
+type ProductImage string
+
+func (ProductImage) XPath() string {
+	return "/html/body/div[1]/main/div/div[2]/div/img/@src"
+}
+
+func GetProductImage(url string) (string, error) {
+	resp, err := scraper.Get(url, make(map[string]string), "")
+	if err != nil {
+		return "", err
+	}
+	var image ProductImage
+	err = xpath.UnmarshalText(resp.Body, &image)
+	if err != nil {
+		return "", err
+	}
+	return string(image), nil
+}
