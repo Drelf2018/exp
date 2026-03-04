@@ -7,11 +7,10 @@ import (
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
-	Use:     "run",
-	Short:   "轮询获取微博",
-	Long:    "执行命令后，程序会打开一个无头浏览器窗口用于刷新登录态，并且轮询获取微博",
-	Version: "0.0.1",
-	RunE:    func(cmd *cobra.Command, args []string) error { return run.Run(cmd.Context(), options) },
+	Use:   "run",
+	Short: "轮询获取微博",
+	Long:  "执行命令后，程序会打开一个无头浏览器窗口用于刷新登录态，并且轮询获取微博",
+	RunE:  func(cmd *cobra.Command, args []string) error { return run.Run(cmd.Context(), options) },
 }
 
 func init() {

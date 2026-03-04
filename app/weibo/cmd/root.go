@@ -12,11 +12,14 @@ import (
 	"github.com/spf13/viper"
 )
 
+var Version string
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "weibo",
-	Short: "微博监控",
-	Long:  "在完成登录后，程序会定时刷新登录态并轮询获取微博",
+	Use:     "weibo",
+	Short:   "微博监控",
+	Long:    "在完成登录后，程序会定时刷新登录态并轮询获取微博",
+	Version: Version,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// 判断文件格式是否支持
 		ext := filepath.Ext(cfgFile)
