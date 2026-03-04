@@ -20,6 +20,9 @@ var rootCmd = &cobra.Command{
 	Short:   "微博监控",
 	Long:    "在完成登录后，程序会定时刷新登录态并轮询获取微博",
 	Version: Version,
+	CompletionOptions: cobra.CompletionOptions{
+		DisableDefaultCmd: true,
+	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// 判断文件格式是否支持
 		ext := filepath.Ext(cfgFile)

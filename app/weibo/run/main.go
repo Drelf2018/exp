@@ -195,12 +195,17 @@ func Run(ctx context.Context, options config.Options) error {
 	logger.Info("开始获取微博")
 	var last time.Time
 	now := time.Now()
+	throttler := NewErrorThrottler(3, 25*time.Second, 10*time.Minute)
 	for range req.WithDelay(req.RandomDelayer{7 * time.Second, 10 * time.Second}) {
 		last, now = now, time.Now()
 		logger.Debugf("获取微博 (+%s)", now.Sub(last))
 		r, err := GetMymlog(ctx, options.Weibo, jar)
 		if err != nil {
-			entry.WithError(err).Error("获取微博失败")
+			if throttler.RecordError(now) {
+				entry.WithError(err).Error("获取微博失败")
+			} else {
+				logger.WithError(err).Error("获取微博失败")
+			}
 			continue
 		}
 		for _, mblog := range r.Data.List {
