@@ -29,6 +29,9 @@ go.work.sum
 .env
 *.ini
 *.json
+*.yml
+*.yaml
+*.toml
 
 # cookie
 *.cookie

@@ -151,7 +151,7 @@ func Run(ctx context.Context, options config.Options) error {
 	if jar == nil {
 		return fmt.Errorf("获取 Cookie 失败: %w", err)
 	}
-	_, err = GetMymlog(ctx, options.Target, jar)
+	_, err = GetMymlog(ctx, options.Weibo, jar)
 	if err != nil {
 		return fmt.Errorf("验证 Cookie 失败: %w", err)
 	}
@@ -198,7 +198,7 @@ func Run(ctx context.Context, options config.Options) error {
 	for range req.WithDelay(req.RandomDelayer{7 * time.Second, 10 * time.Second}) {
 		last, now = now, time.Now()
 		logger.Debugf("获取微博 (+%s)", now.Sub(last))
-		r, err := GetMymlog(ctx, options.Target, jar)
+		r, err := GetMymlog(ctx, options.Weibo, jar)
 		if err != nil {
 			entry.WithError(err).Error("获取微博失败")
 			continue
@@ -223,7 +223,7 @@ func Run(ctx context.Context, options config.Options) error {
 				p := &send
 				if send.Type == "like" {
 					wrapper := &model.Blog{
-						UID:       strconv.Itoa(options.Target),
+						UID:       strconv.Itoa(options.Weibo),
 						Avatar:    send.Avatar,
 						URL:       send.URL,
 						Time:      send.Time,
