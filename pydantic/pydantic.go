@@ -232,8 +232,25 @@ func (f *File) Parse(v any) {
 }
 
 // Parse 解析一个结构体，返回其所需的所有文件
-func Parse(v any) map[string]*File {
+func Parse(v ...any) map[string]*File {
 	f := &File{Files: map[string]*File{}}
-	f.Parse(v)
+	for _, i := range v {
+		f.Parse(i)
+	}
 	return f.Files
+}
+
+// Save 将导入模型和已解析模型写入文件
+func Save(path string, v ...any) error {
+	err := os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	for _, file := range Parse(v...) {
+		err = file.Save(path)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
