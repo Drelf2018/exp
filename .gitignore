@@ -9,7 +9,7 @@
 *.dylib
 
 # Test binary, built with `go test -c`
-tests/*
+tests
 *.test
 *_test.go
 *.db
@@ -38,6 +38,7 @@ go.work.sum
 
 # run
 *.bat
+*.ps1
 
 # weibo
 blogs
