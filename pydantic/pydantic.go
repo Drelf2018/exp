@@ -17,39 +17,63 @@ var Indent string = "    "
 
 // Model 用来描述一个结构体
 type Model struct {
-	Name   string      // 结构体名称
-	Inline []*Model    // 在字段中定义的内联结构体
-	Fields [][3]string // 导出的字段的下划线命名、pydantic 模型中允许的类型名以及字段注释
+	Name    string      // 结构体名称
+	Inline  []*Model    // 在字段中定义的内联结构体
+	Fields  [][3]string // 导出的字段的下划线命名、pydantic 模型中允许的类型名以及字段注释
+	Parents []string    // 嵌入在本结构体中的类型名
 }
 
 // marshalText 将模型输出为 BaseModel 对象，参数为这个对象整体缩进层数
-func (m *Model) marshalText(depth int) []byte {
-	prefix := strings.Repeat(Indent, depth+1)
-	text := []byte(strings.Repeat(Indent, depth) + "class " + m.Name + "(BaseModel):")
-	if len(m.Inline) == 0 && len(m.Fields) == 0 {
-		return fmt.Appendf(text, "\n%spass", prefix)
+func (m *Model) marshalText(buf *bytes.Buffer, depth int) {
+	// 写入首行
+	buf.WriteString(strings.Repeat(Indent, depth))
+	buf.WriteString("class ")
+	buf.WriteString(m.Name)
+	buf.WriteString("(")
+	if len(m.Parents) != 0 {
+		buf.WriteString(strings.Join(m.Parents, ", "))
+	} else {
+		buf.WriteString("BaseModel")
 	}
+	buf.WriteString("):")
+	// 写入对象内容
+	prefix := strings.Repeat(Indent, depth+1)
+	// 内容为空提前返回
+	if len(m.Inline) == 0 && len(m.Fields) == 0 {
+		buf.WriteByte('\n')
+		buf.WriteString(prefix)
+		buf.WriteString("pass")
+		return
+	}
+	// 先写入内联对象
 	if len(m.Inline) != 0 {
 		for _, a := range m.Inline {
-			text = append(text, '\n', '\n')
-			text = append(text, a.marshalText(depth+1)...)
+			buf.WriteString("\n\n")
+			a.marshalText(buf, depth+1)
 		}
 		if len(m.Fields) != 0 {
-			text = append(text, '\n')
+			buf.WriteByte('\n')
 		}
 	}
+	// 再写入字段
 	for _, f := range m.Fields {
-		text = fmt.Appendf(text, "\n%s%s: %s", prefix, f[0], f[1])
+		buf.WriteByte('\n')
+		buf.WriteString(prefix)
+		buf.WriteString(f[0])
+		buf.WriteString(": ")
+		buf.WriteString(f[1])
 		if f[2] != "" {
-			text = fmt.Appendf(text, "  # %s", f[2])
+			buf.WriteString("  # ")
+			buf.WriteString(f[2])
 		}
 	}
-	return text
 }
 
 // MarshalText 将模型输出为 BaseModel 对象
 func (m *Model) MarshalText() ([]byte, error) {
-	return m.marshalText(0), nil
+	buf := &bytes.Buffer{}
+	m.marshalText(buf, 0)
+	return buf.Bytes(), nil
 }
 
 var _ encoding.TextMarshaler = (*Model)(nil)
@@ -67,7 +91,7 @@ func (f *File) find(t reflect.Type) *File {
 	if f.Files == nil {
 		f.Files = make(map[string]*File)
 	}
-	pkg := t.PkgPath()
+	pkg := strings.ReplaceAll(t.PkgPath(), "-", "_")
 	file, ok := f.Files[pkg]
 	if !ok {
 		file = &File{Name: pkg, Files: f.Files}
@@ -105,11 +129,21 @@ func (f *File) parseStruct(t reflect.Type, fieldName string) *Model {
 		if !field.IsExported() {
 			continue
 		}
+		if field.Anonymous {
+			model.Parents = append(model.Parents, f.parse(field.Type, field.Name, model))
+			continue
+		}
+		name := field.Tag.Get("json")
+		if name == "-" {
+			continue
+		} else if name == "" {
+			name = method.CamelToSnake(field.Name)
+		}
 		comment := field.Tag.Get("comment")
 		if comment == "" {
 			comment = field.Tag.Get("description")
 		}
-		model.Fields = append(model.Fields, [3]string{method.CamelToSnake(field.Name), f.parse(field.Type, field.Name, model), comment})
+		model.Fields = append(model.Fields, [3]string{name, f.parse(field.Type, field.Name, model), comment})
 	}
 	return model
 }
@@ -137,7 +171,7 @@ func (f *File) parse(t reflect.Type, fieldName string, model *Model) string {
 	case reflect.Map:
 		return "Dict[" + f.parse(t.Key(), fieldName+"Key", model) + ", " + f.parse(t.Elem(), fieldName+"Value", model) + "]"
 	case reflect.Struct:
-		pkg := t.PkgPath()
+		pkg := strings.ReplaceAll(t.PkgPath(), "-", "_")
 		name := t.Name()
 		// 是否为特殊类型
 		switch pkg + "." + name {
@@ -145,7 +179,7 @@ func (f *File) parse(t reflect.Type, fieldName string, model *Model) string {
 			f.importFile("datetime")
 			return "datetime.datetime"
 		}
-		// 不处于相同包内的需要导入，在同一个包的需要判断是否为内联
+		// 不处于相同包内的需要导入，在同一个包的需要判断是否为内联或者嵌入
 		if pkg != f.Name && pkg != "" {
 			f.importFile(pkg)
 			f.find(t).parseStruct(t, name)
