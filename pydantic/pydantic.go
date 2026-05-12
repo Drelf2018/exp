@@ -19,7 +19,7 @@ var Indent string = "    "
 type Model struct {
 	Name    string      // 结构体名称
 	Inline  []*Model    // 在字段中定义的内联结构体
-	Fields  [][3]string // 导出的字段的下划线命名、pydantic 模型中允许的类型名以及字段注释
+	Fields  [][4]string // 导出的字段的下划线命名、pydantic 模型中允许的类型名、字段别名以及字段注释
 	Parents []string    // 嵌入在本结构体中的类型名
 }
 
@@ -62,9 +62,14 @@ func (m *Model) marshalText(buf *bytes.Buffer, depth int) {
 		buf.WriteString(f[0])
 		buf.WriteString(": ")
 		buf.WriteString(f[1])
-		if f[2] != "" {
-			buf.WriteString("  # ")
+		if f[2] != "" && f[2] != f[0] {
+			buf.WriteString(" = Field(alias=\"")
 			buf.WriteString(f[2])
+			buf.WriteString("\")")
+		}
+		if f[3] != "" {
+			buf.WriteString("  # ")
+			buf.WriteString(f[3])
 		}
 	}
 }
@@ -133,17 +138,15 @@ func (f *File) parseStruct(t reflect.Type, fieldName string) *Model {
 			model.Parents = append(model.Parents, f.parse(field.Type, field.Name, model))
 			continue
 		}
-		name := field.Tag.Get("json")
-		if name == "-" {
+		alias := strings.TrimSuffix(field.Tag.Get("json"), ",omitempty")
+		if alias == "-" {
 			continue
-		} else if name == "" {
-			name = method.CamelToSnake(field.Name)
 		}
 		comment := field.Tag.Get("comment")
 		if comment == "" {
 			comment = field.Tag.Get("description")
 		}
-		model.Fields = append(model.Fields, [3]string{name, f.parse(field.Type, field.Name, model), comment})
+		model.Fields = append(model.Fields, [4]string{method.CamelToSnake(field.Name), f.parse(field.Type, field.Name, model), alias, comment})
 	}
 	return model
 }
@@ -220,7 +223,7 @@ func (f *File) MarshalText() ([]byte, error) {
 			return nil, err
 		}
 	}
-	_, err := buf.WriteString("from typing import Any, Dict, List, Optional\n\nfrom pydantic import BaseModel")
+	_, err := buf.WriteString("from typing import Any, Dict, List, Optional\n\nfrom pydantic import BaseModel, Field")
 	if err != nil {
 		return nil, err
 	}
