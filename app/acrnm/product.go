@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/Drelf2018/exp/xpath"
@@ -84,12 +87,14 @@ func (Products) XPath() string {
 }
 
 func GetProducts() ([]*Product, error) {
-	resp, err := scraper.Get("https://acrnm.com?sort=default&filter=txt", make(map[string]string), "")
+	resp, err := http.Get("http://serverless.nana7mi.link/api/acrnm")
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
 	var products Products
-	err = xpath.UnmarshalText(resp.Body, &products)
+	err = json.Unmarshal(b, &products)
 	return products, err
 }
 

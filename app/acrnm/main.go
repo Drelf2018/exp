@@ -10,16 +10,23 @@ import (
 	"github.com/Drelf2018/exp/fangtang"
 	"github.com/Drelf2018/exp/hook"
 	"github.com/Drelf2018/exp/qiniu"
-	"github.com/jessevdk/go-flags"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
+type Logger struct {
+	Level    string `json:"level" yaml:"level" toml:"level" long:"level"`
+	Filename string `json:"filename" yaml:"filename" toml:"filename" long:"filename"`
+}
+
 type Options struct {
-	CSV      string                   `long:"csv" description:"csv 文件路径"`
-	Logger   string                   `long:"logger" description:"日志文件路径"`
-	FangTang fangtang.FangTang        `long:"fangtang" description:"方糖密钥"`
-	DingTalk *dingtalk.Bot            `group:"DingTalk" description:"钉钉机器人"`
-	Qiniu    *qiniu.TemporaryUploader `group:"Qiniu" description:"七牛云凭证"`
+	CSV      string                   `toml:"csv" description:"csv 文件路径"`
+	FangTang fangtang.FangTang        `toml:"fangtang" description:"方糖密钥"`
+	Logger   Logger                   `toml:"Logger" description:"日志等级和文件名格式"`
+	DingTalk *dingtalk.Bot            `toml:"DingTalk" description:"钉钉机器人"`
+	Error    *dingtalk.Bot            `toml:"Error" description:"错误消息钉钉机器人"`
+	Qiniu    *qiniu.TemporaryUploader `toml:"Qiniu" description:"七牛云凭证"`
 }
 
 var (
@@ -27,24 +34,33 @@ var (
 	logger  *logrus.Logger
 	csv     *os.File
 	bot     *logrus.Entry
+	errBot  *logrus.Entry
 )
 
 // 获取运行参数
 func init() {
-	// 解析默认配置文件
-	err := flags.IniParse("config.ini", &options)
-	if err != nil {
+	v := viper.New()
+	v.SetConfigFile("config.toml")
+	if err := v.ReadInConfig(); err != nil {
 		logrus.Panic(err)
 	}
-	// 解析命令行参数
-	_, err = flags.Parse(&options)
+	// 解析默认配置文件
+	err := v.Unmarshal(&options, viper.DecoderConfigOption(func(dc *mapstructure.DecoderConfig) {
+		dc.TagName = "toml"
+	}))
 	if err != nil {
 		logrus.Panic(err)
 	}
 	// 初始化日志
 	ding := hook.NewDingTalkHook(options.DingTalk)
-	logger = hook.New(logrus.InfoLevel, hook.NewDailyFileHook(options.Logger), ding)
+	erro := hook.NewDingTalkHook(options.Error)
+	level, err := logrus.ParseLevel(options.Logger.Level)
+	if err != nil {
+		logrus.Panic(err)
+	}
+	logger = hook.New(level, hook.NewDailyFileHook(options.Logger.Filename), ding, erro)
 	bot = ding.Bind(logger)
+	errBot = erro.Bind(logger)
 }
 
 // 初始化数据库
@@ -76,7 +92,7 @@ func AppendCSV(cmd string, product *Product) {
 		time.Now().Format("2006-01-02 15:04:05"),
 		cmd, product.Name, product.Price, product.VariantString(" ", ","))
 	if err != nil {
-		bot.WithError(err).Error("写入文件失败")
+		errBot.WithError(err).Error("写入文件失败")
 	}
 }
 
@@ -91,7 +107,7 @@ func SendDingTalk(cmd string, product *Product, image string) {
 		filepath := fmt.Sprintf("acrnm%s_%s.jpg", product.Href, time.Now().Format("2006_01_02_15_04_05"))
 		err := options.Qiniu.UploadURL(context.Background(), image, filepath, qiniu.JPEG)
 		if err != nil {
-			bot.WithError(err).Error("上传图片失败")
+			errBot.WithError(err).Error("上传图片失败")
 		} else {
 			fields["banner"] = "https://yun.nana7mi.link/" + filepath
 		}
@@ -108,7 +124,7 @@ func SendFangTang(cmd string, product *Product, image string) {
 	}
 	_, err := options.FangTang.Send(title, desp, fangtang.WeChat)
 	if err != nil {
-		bot.WithError(err).Error("方糖推送失败")
+		errBot.WithError(err).Error("方糖推送失败")
 	}
 }
 
@@ -143,7 +159,7 @@ func main() {
 			}
 		},
 		OnError: func(err error) {
-			bot.WithError(err).Error("请求发生错误")
+			errBot.WithError(err).Error("请求发生错误")
 		},
 	}
 	err := acrnm.Run()
