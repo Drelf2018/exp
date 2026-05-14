@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Drelf2018/exp/xpath"
 	"github.com/RomainMichau/cloudscraper_go/cloudscraper"
 )
+
+var BaseURL, _ = url.Parse("https://acrnm.com/")
 
 // 商品款式
 type Variant struct {
@@ -74,7 +77,7 @@ func (p *Product) VariantString(hyphen, sep string) string {
 }
 
 func (p Product) URL() string {
-	return "https://acrnm.com" + p.Href
+	return BaseURL.JoinPath(p.Href).String()
 }
 
 var scraper, _ = cloudscraper.Init(false, false)
