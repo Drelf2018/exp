@@ -16,6 +16,7 @@ import (
 	"github.com/Drelf2018/exp/hook"
 	"github.com/Drelf2018/exp/model"
 	"github.com/Drelf2018/req"
+	"github.com/Drelf2018/req/method"
 	"github.com/playwright-community/playwright-go"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
@@ -24,13 +25,30 @@ import (
 )
 
 var (
-	logger         *logrus.Logger
-	entry          *logrus.Entry
-	browserContext playwright.BrowserContext
+	logger  *logrus.Logger
+	entry   *logrus.Entry
+	browser playwright.Browser
 )
 
 // Screenshot 访问主页并截图
-func Screenshot(ctx context.Context, homepage string) ([]byte, http.CookieJar, error) {
+func Screenshot(ctx context.Context, homepage string, state string) ([]byte, http.CookieJar, error) {
+	logger.Debug("读取浏览器状态")
+	b, err := os.ReadFile(state)
+	if err != nil {
+		return nil, nil, fmt.Errorf("读取浏览器状态失败: %w", err)
+	}
+	logger.Debug("反序列化浏览器状态")
+	var storageState playwright.OptionalStorageState
+	err = json.Unmarshal(b, &storageState)
+	if err != nil {
+		return nil, nil, fmt.Errorf("反序列化浏览器状态失败: %w", err)
+	}
+	logger.Debug("创建浏览器上下文")
+	browserContext, err := browser.NewContext(playwright.BrowserNewContextOptions{StorageState: &storageState})
+	if err != nil {
+		return nil, nil, fmt.Errorf("创建浏览器上下文失败: %w", err)
+	}
+	defer browserContext.Close()
 	// 新建页面
 	logger.Debug("新建页面")
 	page, err := browserContext.NewPage()
@@ -74,6 +92,19 @@ func Screenshot(ctx context.Context, homepage string) ([]byte, http.CookieJar, e
 				logger.Debug("缺少 XSRF-TOKEN")
 				continue
 			}
+			// 保存状态
+			storage, err := browserContext.StorageState()
+			if err != nil {
+				return nil, nil, fmt.Errorf("获取浏览器状态失败: %w", err)
+			}
+			b, err := json.Marshal(storage)
+			if err != nil {
+				return nil, nil, fmt.Errorf("序列化浏览器状态失败: %w", err)
+			}
+			err = os.WriteFile(state, b, os.ModePerm)
+			if err != nil {
+				return nil, nil, fmt.Errorf("写入浏览器状态失败: %w", err)
+			}
 			logger.Debug("验证 Cookie")
 			jar, err := cookiejar.New(nil)
 			if err != nil {
@@ -114,7 +145,7 @@ func Run(ctx context.Context, options config.Options) error {
 		return fmt.Errorf("启动 playwright 失败: %w", err)
 	}
 	logger.Debug("启动 Chromium 浏览器")
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+	browser, err = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 		Args: []string{
 			"--no-sandbox",
 			"--disable-dev-shm-usage",
@@ -130,24 +161,8 @@ func Run(ctx context.Context, options config.Options) error {
 		return fmt.Errorf("启动浏览器失败: %w", err)
 	}
 	defer browser.Close()
-	logger.Debug("读取浏览器状态")
-	b, err := os.ReadFile(options.State)
-	if err != nil {
-		return fmt.Errorf("读取浏览器状态失败: %w", err)
-	}
-	logger.Debug("反序列化浏览器状态")
-	var storageState playwright.OptionalStorageState
-	err = json.Unmarshal(b, &storageState)
-	if err != nil {
-		return fmt.Errorf("反序列化浏览器状态失败: %w", err)
-	}
-	logger.Debug("创建浏览器上下文")
-	browserContext, err = browser.NewContext(playwright.BrowserNewContextOptions{StorageState: &storageState})
-	if err != nil {
-		return fmt.Errorf("创建浏览器上下文失败: %w", err)
-	}
 	logger.Debug("初始化 Cookie")
-	_, jar, err := Screenshot(ctx, session.BaseURL.String())
+	_, jar, err := Screenshot(ctx, session.BaseURL.String(), options.State)
 	if jar == nil {
 		return fmt.Errorf("获取 Cookie 失败: %w", err)
 	}
@@ -158,7 +173,7 @@ func Run(ctx context.Context, options config.Options) error {
 	logger.Debugln("开启 Cookie 保活:", options.Crontab)
 	c := cron.New()
 	_, err = c.AddFunc(options.Crontab, func() {
-		img, c, err := Screenshot(ctx, session.BaseURL.String())
+		img, c, err := Screenshot(ctx, session.BaseURL.String(), options.State)
 		if c != nil {
 			jar = c
 		}
@@ -175,10 +190,7 @@ func Run(ctx context.Context, options config.Options) error {
 		if err != nil {
 			entry.WithError(err).Error("截屏上传失败")
 		} else {
-			entry.WithFields(logrus.Fields{
-				hook.BannerKey: "https://yun.nana7mi.link/" + objectName,
-				hook.TitleKey:  "微博刷新成功",
-			}).Info()
+			logger.Debugf("微博刷新成功 (https://yun.nana7mi.link/%s)", objectName)
 		}
 	})
 	if err != nil {
@@ -229,7 +241,6 @@ func Run(ctx context.Context, options config.Options) error {
 				if send.Type == "like" {
 					wrapper := &model.Blog{
 						UID:       strconv.Itoa(options.Weibo),
-						Avatar:    send.Avatar,
 						URL:       send.URL,
 						Time:      send.Time,
 						Plaintext: send.Title,

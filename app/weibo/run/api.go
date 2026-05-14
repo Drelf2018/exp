@@ -47,6 +47,7 @@ type ProfileInfoResponse struct {
 	Ok   int `json:"ok"`
 	Data struct {
 		User struct {
+			AvatarHd          string `json:"avatar_hd"`
 			ScreenName        string `json:"screen_name"`
 			Description       string `json:"description"`
 			FollowersCountStr string `json:"followers_count_str"`
@@ -175,6 +176,7 @@ func SetProfileInfo(ctx context.Context, blog *model.Blog, jar http.CookieJar) {
 	r, blog.Extra["profile_info_error"] = GetProfileInfo(ctx, blog.UID, jar)
 	blog.Name = r.Data.User.ScreenName
 	blog.Desc = r.Data.User.Description
+	blog.Avatar = r.Data.User.AvatarHd
 	blog.Banner, _, _ = strings.Cut(r.Data.User.CoverImagePhone, ";")
 	blog.Follower = r.Data.User.FollowersCountStr
 	blog.Following = strconv.Itoa(r.Data.User.FriendsCount)
