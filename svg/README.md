@@ -40,14 +40,19 @@ go get github.com/Drelf2018/exp/svg
 
 ## 接口
 
-只导出两个函数，就是注册进去的那两个，签名与标准库完全一致；没有别的导出类型或配置项。
+`Decode` 和 `DecodeConfig` 就是注册进去的那两个函数，签名与标准库完全一致——空导入本包、
+之后只用 `image.Decode` 的人看不到任何区别。需要自己指定输出尺寸时，再多用 `DecodeSize` 这一个。
 
 | 函数 | 说明 |
 | --- | --- |
-| `svg.Decode(io.Reader) (image.Image, error)` | 等价于 `image.Decode`，返回 `*image.RGBA` |
+| `svg.Decode(io.Reader) (image.Image, error)` | 等价于 `image.Decode`，按固有尺寸栅格化，返回 `*image.RGBA` |
 | `svg.DecodeConfig(io.Reader) (image.Config, error)` | 等价于 `image.DecodeConfig`，只读尺寸不解码 |
+| `svg.DecodeSize(io.Reader, width, height int) (image.Image, error)` | 按指定尺寸栅格化，返回 `*image.RGBA` |
 
 格式名是 `svg`，识别 `<svg`、`<?xml`、`<!DOCTYPE svg` 以及带 UTF-8 BOM 的写法。
+
+`DecodeSize` 不在 `image` 包的注册契约里：注册表只能把前缀映射到解码器，没有传尺寸的地方，
+所以"按需尺寸栅格化"只能用这个具名入口，空导入的用法不受影响。
 
 ## 图像尺寸
 
@@ -59,18 +64,24 @@ go get github.com/Drelf2018/exp/svg
 4. 都没有则按浏览器默认的 300 × 150。
 
 `viewBox` 与固有尺寸的宽高比不一致时，按 `preserveAspectRatio` 留白或裁剪。
-要别的尺寸，解码后自己缩放即可（用 [x/image/draw](https://pkg.go.dev/golang.org/x/image/draw)）：
+
+要别的尺寸就直接用 `DecodeSize`，位图一次画到位，不必先按固有尺寸画一遍再缩小：
 
 ```go
-dst := image.NewRGBA(image.Rect(0, 0, 32, 32))
-draw.CatmullRom.Scale(dst, dst.Bounds(), img, img.Bounds(), draw.Over, nil)
+import svg "github.com/Drelf2018/exp/svg" // 具名引入同样会完成注册，不必再写一行空导入
+
+img, err := svg.DecodeSize(f, 32, 32) // f 就是开头那个 *os.File，输出即 32x32
 ```
+
+输出尺寸只由调用方决定，与文档声明的固有尺寸无关；视口定下来之后，内容仍按文档自己的
+`preserveAspectRatio` 摆放：默认的 `xMidYMid meet` 等比缩放并留白居中，`slice` 裁剪，
+`none` 非等比拉伸铺满。尺寸非正、或单边超过 4096 像素时直接报错。
 
 ## 行为
 
 - 错误信息统一是 `svg: <动作+对象>: <细节>`，例如 `svg: read stream: unexpected EOF`、
   `svg: read root element: expected <svg>, got: <rss>`；不会静默给出空图；
-- 单张位图超过 4096 × 4096 像素直接报错，避免畸形 SVG 撑爆内存；
+- 单张位图单边超过 4096 像素、面积超过 4096 × 4096 像素直接报错，避免畸形 SVG 撑爆内存；
 - `encoding="GB2312"` 之类的非 UTF-8 文档也能解码；
 - 解析前会修掉 oksvg 的几个已知问题——定义块写在引用之后会被画成黑色、`width="100%"` 这类尺寸
   写法会让整张图空白、单参数 `scale()` 的 transform 会让图元消失——都是纯字节改写，不改动文档语义。

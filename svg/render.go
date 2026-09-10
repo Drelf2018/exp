@@ -25,8 +25,17 @@ type doc struct {
 
 // render 按固有尺寸开一张位图，再按 preserveAspectRatio 把 viewBox 映射上去。
 func (d *doc) render() (*image.RGBA, error) {
-	w, h := d.size.X, d.size.Y
-	if w <= 0 || h <= 0 || w*h > maxPixels {
+	return d.renderAt(d.size.X, d.size.Y)
+}
+
+// renderAt 按调用方给定的尺寸开一张位图，再按 preserveAspectRatio 把 viewBox 映射上去。
+// 视口（w、h）与文档的固有尺寸无关：视口定下来之后，内容怎么在里面留白、对齐、
+// 或者被裁掉，仍然只由文档自己的 preserveAspectRatio 决定，见 draw。
+func (d *doc) renderAt(w, h int) (*image.RGBA, error) {
+	if w <= 0 || h <= 0 {
+		return nil, fmt.Errorf("svg: render image: non-positive size: got %dx%d", w, h)
+	}
+	if w > maxSide || h > maxSide || w*h > maxPixels {
 		return nil, fmt.Errorf("svg: render image: too large: got %dx%d, limit %dx%d", w, h, maxSide, maxSide)
 	}
 	img := image.NewRGBA(image.Rect(0, 0, w, h))

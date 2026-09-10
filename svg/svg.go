@@ -12,7 +12,11 @@
 // 最后输出标准库的 *image.RGBA。
 //
 // 和 png、jpeg 一样，本包也导出 Decode 和 DecodeConfig，它们就是注册进去的
-// 那两个函数，签名和 image.Decode、image.DecodeConfig 完全一致；除此之外没有别的导出内容。
+// 那两个函数，签名和 image.Decode、image.DecodeConfig 完全一致。
+//
+// 除此之外还多一个 DecodeSize，供需要指定输出尺寸的调用方使用。它不在 image 包的
+// 注册契约里：注册表只能把前缀映射到解码器，没有传尺寸的地方，所以这一项只能具名调用。
+// 空导入的用法完全不受影响。
 //
 // 代码结构：
 //
@@ -74,4 +78,23 @@ func DecodeConfig(r io.Reader) (image.Config, error) {
 		return image.Config{}, err
 	}
 	return h.intrinsic(), nil
+}
+
+// DecodeSize 把 SVG 栅格化成一张 width x height 的位图，返回值的动态类型是
+// *image.RGBA，背景保持透明。
+//
+// 和 Decode 的区别只有一处：输出位图的尺寸由调用方给定，而不是文档的固有尺寸。
+// 拿到手的就是最终尺寸，不必先按固有尺寸画一遍再缩放——图标、缩略图这类场景既省掉
+// 一次大位图，也避免固有尺寸偏小时被放大而发糊。
+//
+// 视口定了之后，内容怎么摆仍由文档自己的 preserveAspectRatio 决定：默认的
+// xMidYMid meet 等比缩放并留白居中，slice 裁剪，none 非等比拉伸铺满。
+//
+// width 或 height 非正、或单边超过 4096 像素时返回错误。
+func DecodeSize(r io.Reader, width, height int) (image.Image, error) {
+	d, err := parse(r)
+	if err != nil {
+		return nil, err
+	}
+	return d.renderAt(width, height)
 }
