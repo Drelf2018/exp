@@ -17,7 +17,7 @@ func parse(r io.Reader) (*doc, error) {
 	}
 	h, err := readHeader(data)
 	if err != nil {
-		// readHeader 的报错已经带齐了类别前缀（unknown format / parse）和原因。
+		// readHeader 的报错已经说清了是哪一步、什么原因，这里原样上抛，避免套两层前缀。
 		return nil, err
 	}
 	icon, err := oksvg.ReadIconStream(bytes.NewReader(data), oksvg.IgnoreErrorMode)

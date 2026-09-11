@@ -90,7 +90,7 @@ func DecodeConfig(r io.Reader) (image.Config, error) {
 // 视口定了之后，内容怎么摆仍由文档自己的 preserveAspectRatio 决定：默认的
 // xMidYMid meet 等比缩放并留白居中，slice 裁剪，none 非等比拉伸铺满。
 //
-// width 或 height 非正、或单边超过 4096 像素时返回错误。
+// width 或 height 非正、或像素总量超过 4096 × 4096 时返回错误（细长视口不受单边限制）。
 func DecodeSize(r io.Reader, width, height int) (image.Image, error) {
 	d, err := parse(r)
 	if err != nil {

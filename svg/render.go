@@ -9,11 +9,13 @@ import (
 	"github.com/srwiley/rasterx"
 )
 
-// maxSide 是单张位图允许的单边像素上限。SVG 可以靠 width="1e9" 之类的写法
-// 廉价地声明一个超大画布，这里做个兜底，避免解码不可信来源的文件时撑爆内存。
-const maxSide = 4096
-
-const maxPixels = maxSide * maxSide
+// maxPixels 是单张位图允许的像素总量上限（4096 × 4096，约 67MB 的 RGBA）。
+// SVG 可以靠 width="1e9" 之类的写法廉价地声明一个超大画布，这里做个兜底，
+// 避免解码不可信来源的文件时撑爆内存。
+//
+// 按面积而不是按单边限制：内存占用只跟面积有关，而细长的画布（时间线、拼图条、
+// 分隔线）是合法用法——1×5000 只有 20KB，不该被当成「太大」。
+const maxPixels = 4096 * 4096
 
 // doc 是一份解析好的 SVG：oksvg 的图元，加上本包解析出来的视口信息。
 type doc struct {
@@ -35,8 +37,9 @@ func (d *doc) renderAt(w, h int) (*image.RGBA, error) {
 	if w <= 0 || h <= 0 {
 		return nil, fmt.Errorf("svg: render image: non-positive size: got %dx%d", w, h)
 	}
-	if w > maxSide || h > maxSide || w*h > maxPixels {
-		return nil, fmt.Errorf("svg: render image: too large: got %dx%d, limit %dx%d", w, h, maxSide, maxSide)
+	// 单边先卡住是为了让 w*h 不溢出；真正的策略是面积上限。
+	if w > maxPixels || h > maxPixels || w*h > maxPixels {
+		return nil, fmt.Errorf("svg: render image: too large: got %dx%d, limit %d pixels", w, h, maxPixels)
 	}
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	d.draw(img, w, h)
