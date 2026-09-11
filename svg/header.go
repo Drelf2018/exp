@@ -4,7 +4,6 @@ package svg
 // 数据怎么用——固有尺寸怎么推导、视口怎么定——见 viewport.go，渲染见 render.go。
 
 import (
-	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -25,26 +24,29 @@ type header struct {
 }
 
 // readHeader 只解析根元素，用于在真正渲染之前拿到尺寸信息。
-func readHeader(data []byte) (h header, err error) {
+// 它从 r 里按需读取：xml.Decoder 是流式的，读到根元素就停，文档再大也不会整份读进来。
+func readHeader(r io.Reader) (h header, err error) {
 	h.aspect = defaultAspect()
-	if len(bytes.TrimSpace(data)) == 0 {
-		return h, errors.New("svg: read root element: empty input")
-	}
-	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec := xml.NewDecoder(r)
 	// 宽容模式：这一步只是我们自己读尺寸，不该因为 &nbsp; 这类未定义实体就放弃。
 	// 注意后面的 oksvg 仍然是严格解码，整份文档能不能解析最终取决于它。
 	dec.Strict = false
 	dec.CharsetReader = charset.NewReaderLabel
 	var root *xml.StartElement
+	first := true // 尚未读到任何 token：空输入与"读到底都没根元素"要分开报
 	for root == nil {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
+			if first {
+				return h, errors.New("svg: read root element: empty input")
+			}
 			// 一路读到结尾都没遇到根元素，多半根本不是 XML。
 			return h, errors.New("svg: read root element: not found")
 		}
 		if err != nil {
 			return h, fmt.Errorf("svg: read root element: %w", err)
 		}
+		first = false
 		se, ok := tok.(xml.StartElement)
 		if !ok {
 			continue

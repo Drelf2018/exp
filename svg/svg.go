@@ -68,12 +68,9 @@ func Decode(r io.Reader) (image.Image, error) {
 }
 
 // DecodeConfig 返回 SVG 的固有尺寸，签名和 image.DecodeConfig 一致。
+// 它只读到根元素为止，不会把整个文档读进内存。
 func DecodeConfig(r io.Reader) (image.Config, error) {
-	data, err := readAll(r)
-	if err != nil {
-		return image.Config{}, err
-	}
-	h, err := readHeader(data)
+	h, err := readHeader(r)
 	if err != nil {
 		return image.Config{}, err
 	}
