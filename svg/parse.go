@@ -7,7 +7,7 @@ import (
 	"image"
 	"io"
 
-	"github.com/srwiley/oksvg"
+	"github.com/Drelf2018/oksvg"
 )
 
 func parse(r io.Reader) (*doc, error) {
@@ -20,7 +20,7 @@ func parse(r io.Reader) (*doc, error) {
 		// readHeader 的报错已经带齐了类别前缀（unknown format / parse）和原因。
 		return nil, err
 	}
-	icon, err := oksvg.ReadIconStream(bytes.NewReader(prepare(data, h)), oksvg.IgnoreErrorMode)
+	icon, err := oksvg.ReadIconStream(bytes.NewReader(data), oksvg.IgnoreErrorMode)
 	if err != nil {
 		// 能走到这里说明确实是 SVG，只是 oksvg 解不开。
 		return nil, fmt.Errorf("svg: parse document: %w", err)

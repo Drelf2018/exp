@@ -5,7 +5,7 @@ import (
 	"image"
 	"math"
 
-	"github.com/srwiley/oksvg"
+	"github.com/Drelf2018/oksvg"
 	"github.com/srwiley/rasterx"
 )
 

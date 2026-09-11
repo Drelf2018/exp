@@ -7,7 +7,7 @@
 //	img, format, err := image.Decode(file)       // format == "svg"，img 是 *image.RGBA
 //	cfg, format, err := image.DecodeConfig(file) // 只读尺寸，不栅格化
 //
-// 解析交给 github.com/srwiley/oksvg，栅格化用 github.com/srwiley/rasterx，
+// 解析交给 github.com/Drelf2018/oksvg（srwiley/oksvg 的接替版），栅格化用 github.com/srwiley/rasterx，
 // 本包负责 oksvg 没做的那一步：算出视口尺寸、处理 preserveAspectRatio，
 // 最后输出标准库的 *image.RGBA。
 //
@@ -21,10 +21,10 @@
 // 代码结构：
 //
 //	svg.go       包文档、image 注册、公共入口
-//	parse.go     解析流水线：读入 → 读尺寸 → 预处理 → 交给 oksvg
+//	parse.go     解析流水线：读入 → 读尺寸 → 交给 oksvg
 //	render.go    文档结构体、像素上限与光栅化
-//	viewport.go  视口与尺寸：viewBox、preserveAspectRatio、单位换算
-//	rewrite.go   交给 oksvg 之前的三处字节级改写
+//	header.go    根元素解析：尺寸属性、viewBox、preserveAspectRatio
+//	viewport.go  视口模型与固有尺寸推导
 //
 // 注意 oksvg 只实现了 SVG 的一个子集：use、text、image、clipPath/mask、
 // 滤镜和脚本动画都不支持，遇到这些元素时会被忽略。

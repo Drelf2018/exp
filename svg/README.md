@@ -27,7 +27,7 @@ func main() {
 }
 ```
 
-解析用 [oksvg](https://github.com/srwiley/oksvg)，栅格化用 [rasterx](https://github.com/srwiley/rasterx)，
+解析用 [oksvg](https://github.com/Drelf2018/oksvg)（srwiley/oksvg 的接替版），栅格化用 [rasterx](https://github.com/srwiley/rasterx)，
 本包补上它们之间缺的一环：视口尺寸计算、`preserveAspectRatio`、输出 `*image.RGBA`，并注册进 `image`。
 
 ## 安装
@@ -46,31 +46,55 @@ go get github.com/Drelf2018/exp/svg
 | 函数 | 说明 |
 | --- | --- |
 | `svg.Decode(io.Reader) (image.Image, error)` | 等价于 `image.Decode`，按固有尺寸栅格化，返回 `*image.RGBA` |
-| `svg.DecodeConfig(io.Reader) (image.Config, error)` | 等价于 `image.DecodeConfig`，只读尺寸不解码 |
+| `svg.DecodeConfig(io.Reader) (image.Config, error)` | 等价于 `image.DecodeConfig`，只推导尺寸，不栅格化 |
 | `svg.DecodeSize(io.Reader, width, height int) (image.Image, error)` | 按指定尺寸栅格化，返回 `*image.RGBA` |
 
 格式名是 `svg`，识别 `<svg`、`<?xml`、`<!DOCTYPE svg` 以及带 UTF-8 BOM 的写法。
 
 `DecodeSize` 不在 `image` 包的注册契约里：注册表只能把前缀映射到解码器，没有传尺寸的地方，
-所以"按需尺寸栅格化"只能用这个具名入口，空导入的用法不受影响。
+所以"按指定尺寸栅格化"只能用这个具名入口，空导入的用法不受影响。
 
 ## 图像尺寸
 
-输出尺寸取 SVG 的固有尺寸（它自己声明的尺寸）：
+不指定尺寸时，输出取 SVG 的固有尺寸（它自己声明的尺寸）：
 
 1. 根元素的 `width` / `height`（支持 `px`、`pt`、`pc`、`in`、`cm`、`mm`、`q`，按 96 DPI 换算）；
 2. 只写一个时，另一个按 `viewBox` 的宽高比推导；
-3. `100%`、`10em` 这类无法单独确定的值，退回 `viewBox` 的尺寸；
+3. `100%`、`10em` 这类依赖外部上下文、无法单独确定的值，退回 `viewBox` 的尺寸；
 4. 都没有则按浏览器默认的 300 × 150。
 
-`viewBox` 与固有尺寸的宽高比不一致时，按 `preserveAspectRatio` 留白或裁剪。
+`viewBox` 与固有尺寸的宽高比不一致时，按文档自己的 `preserveAspectRatio` 留白或裁剪。
 
-要别的尺寸就直接用 `DecodeSize`，位图一次画到位，不必先按固有尺寸画一遍再缩小：
+## 指定尺寸
+
+要别的尺寸就用 `DecodeSize`，位图一次画到位，不必先按固有尺寸画一遍再缩小：
 
 ```go
-import svg "github.com/Drelf2018/exp/svg" // 具名引入同样会完成注册，不必再写一行空导入
+package main
 
-img, err := svg.DecodeSize(f, 32, 32) // f 就是开头那个 *os.File，输出即 32x32
+import (
+	"image/png"
+	"log"
+	"os"
+
+	svg "github.com/Drelf2018/exp/svg" // 具名引入同样会完成注册，不必再写一行空导入
+)
+
+func main() {
+	f, err := os.Open("icon.svg")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	img, err := svg.DecodeSize(f, 32, 32) // 输出就是 32x32
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := png.Encode(os.Stdout, img); err != nil {
+		log.Fatal(err)
+	}
+}
 ```
 
 输出尺寸只由调用方决定，与文档声明的固有尺寸无关；视口定下来之后，内容仍按文档自己的
@@ -83,8 +107,9 @@ img, err := svg.DecodeSize(f, 32, 32) // f 就是开头那个 *os.File，输出�
   `svg: read root element: expected <svg>, got: <rss>`；不会静默给出空图；
 - 单张位图单边超过 4096 像素、面积超过 4096 × 4096 像素直接报错，避免畸形 SVG 撑爆内存；
 - `encoding="GB2312"` 之类的非 UTF-8 文档也能解码；
-- 解析前会修掉 oksvg 的几个已知问题——定义块写在引用之后会被画成黑色、`width="100%"` 这类尺寸
-  写法会让整张图空白、单参数 `scale()` 的 transform 会让图元消失——都是纯字节改写，不改动文档语义。
+- 不对文档做任何字节级改写。上游 oksvg 的几个已知问题——定义块写在引用之后会被画成黑色、
+  `width="100%"` 这类尺寸写法会让整张图空白、单参数 `scale()` 的 transform 会让图元消失——
+  已在接替版里修好。
 
 ## 限制
 
@@ -93,4 +118,9 @@ img, err := svg.DecodeSize(f, 32, 32) // f 就是开头那个 *os.File，输出�
 - 不支持 `<use>`、`<text>`、`<image>`、滤镜、`clipPath`/`mask`、脚本与动画；
 - 不支持外部资源引用，`<style>` 只支持最基础的类选择器；
 - 不支持的元素会被静默忽略；
-- 解码需要把整个 SVG 读进内存，适合图标、徽标这类体量不大的矢量图。
+- 解码需要把整个 SVG 读进内存，适合图标、徽标这类体量不大的矢量图；
+- `DecodeConfig` 同样会读取整个文档：本包要先拿到根元素才能推导尺寸，而根元素可能带编码声明。
+
+## 许可
+
+见仓库根目录的 [LICENSE](../LICENSE)。
